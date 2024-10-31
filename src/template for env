@@ -9,3 +9,6 @@ path_preprocessed =\\SOS Planning\\Preprocessed_files\\
 
 # PREPROCESSING RESOLUTION
 raw_path =\\SOS Planning\\Downloaded_files\\Resolution_raw\\
+# earthaccess login
+EARTHDATA_USERNAME =
+EARTHDATA_PASSWORD =
