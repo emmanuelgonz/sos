@@ -31,7 +31,7 @@ path_shp = os.getenv('path_shp')
 path_preprocessed = os.getenv('path_preprocessed')
 file_name_preprocessed = 'preprocessed_snow_cover.nc'
 path_efficiency = os.getenv('path_efficiency')
-file_name_efficiency = 'efficiency_snow_cover.nc'
+file_name_efficiency = 'efficiency_snow_cover'
 
 # Each data has a code number that can be conveniently used to download data, first login to the earthacess account
 
@@ -132,10 +132,10 @@ config.read("Input_parameters.ini")
 print(config.sections())
 
 config_data = config['Snow_cover'] 
-T = config_data['threshold']
-k = config_data['coefficient']
-
+T = float(config_data['threshold'])
+k = (-1)*float(config_data['coefficient'])
+print(type(k))
 # Caliing the efficiency function and passing the input parameters
 
-efficiency_output = efficiency(T,-k,temp_resampled)
+efficiency_output = efficiency(T,k,temp_resampled)
 efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')

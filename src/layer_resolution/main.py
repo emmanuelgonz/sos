@@ -37,7 +37,8 @@ path_preprocessed = os.getenv('path_preprocessed')
 file_name_preprocessed = 'preprocessed_resolution.nc'
 raw_path = os.getenv('raw_path')
 path_efficiency = os.getenv('path_efficiency')
-file_name_efficiency = 'efficiency_resolution.nc'
+file_name_efficiency = 'efficiency_resolution'
+file_name_efficiency_taskable = 'efficiency_resolution_taskable'
 
 # Downloading SNODAS data
 # define the date range over which to prepare data
@@ -172,9 +173,23 @@ temp = temp.to_dataset()
 temp = temp.rename({'Band1': 'Monthly_Resolution_Abs'})
 #resolution_mo = resolution_mo.assign_coords(month = (resolution_mo.time.dt.month))
 temp_resampled = temp.sel(month=resolution_mo.time.dt.month)
-temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed)
+temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed +'.nc')
 print("Complete - Preprocessed file saved to the dropbox folder")
 
+# Code for taskable satellite
+# Computing absolute difference
+ds_abs_taskable = abs(ds-ds)
+
+print("Taskable - Final data wrangling - groupby for aggregation and joins")
+# Now we add the month column and do a groupby
+resolution_mo = ds_abs_taskable.convert_calendar(calendar='standard')
+temp = resolution_mo.groupby(resolution_mo.time.dt.month).mean()
+temp = temp.to_dataset()
+temp = temp.rename({'Band1': 'Monthly_Resolution_Abs'})
+#resolution_mo = resolution_mo.assign_coords(month = (resolution_mo.time.dt.month))
+temp_resampled_taskable = temp.sel(month=resolution_mo.time.dt.month)
+
+print("Complete - Preprocessing for taskable")
 
 
 # Computing efficiency
@@ -197,12 +212,17 @@ config.read("Input_parameters.ini")
 print(config.sections())
 
 config_data = config['Resolution'] 
-T = config_data['threshold']
-k = config_data['coefficient']
+T = float(config_data['threshold'])
+k = float(config_data['coefficient'])
 
-# Caliing the efficiency function and passing the input parameters
+# Calling the efficiency function and passing the input parameters
 
 efficiency_output = efficiency(T,k,temp_resampled)
 efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')
 
+# ------------------------------TASKABLE--------------------------------------
+# Taskable Calling the efficiency function and passing the input parameters
+
+efficiency_output = efficiency(T,k,temp_resampled_taskable)
+efficiency_output.to_netcdf(path_efficiency + file_name_efficiency_taskable + '.nc')
 
