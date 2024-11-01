@@ -29,7 +29,7 @@ path_hdf = os.getenv('path_hdf')
 path_nc = os.getenv('path_nc')
 path_shp = os.getenv('path_shp')
 path_preprocessed = os.getenv('path_preprocessed')
-file_name_preprocessed = 'preprocessed_snow_cover.nc'
+file_name_preprocessed = 'preprocessed_snow_cover'
 path_efficiency = os.getenv('path_efficiency')
 file_name_efficiency = 'efficiency_snow_cover'
 
@@ -109,7 +109,9 @@ temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
 temp = temp.to_dataset()
 temp = temp.rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
 temp_resampled = temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
-temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed)
+temp_resampled = temp_resampled.rio.write_crs("EPSG:4326")
+temp_resampled = temp_resampled.rio.clip(mo_basin.geometry, "EPSG:4326")
+temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed+ '.nc')
 print("Completed - the preprocessed snow cover file has been saved to the Dropbox folder")
 
 # Computing efficiency

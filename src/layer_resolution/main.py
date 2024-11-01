@@ -34,7 +34,7 @@ load_dotenv('C:\\Users\\dramach6\\OneDrive - Arizona State University\\Documents
 # Defining paths
 path_shp = os.getenv('path_shp')
 path_preprocessed = os.getenv('path_preprocessed')
-file_name_preprocessed = 'preprocessed_resolution.nc'
+file_name_preprocessed = 'preprocessed_resolution'
 raw_path = os.getenv('raw_path')
 path_efficiency = os.getenv('path_efficiency')
 file_name_efficiency = 'efficiency_resolution'
@@ -173,6 +173,8 @@ temp = temp.to_dataset()
 temp = temp.rename({'Band1': 'Monthly_Resolution_Abs'})
 #resolution_mo = resolution_mo.assign_coords(month = (resolution_mo.time.dt.month))
 temp_resampled = temp.sel(month=resolution_mo.time.dt.month)
+temp_resampled = temp_resampled.rio.write_crs("EPSG:4326")
+temp_resampled = temp_resampled.rio.clip(mo_basin.geometry, "EPSG:4326")
 temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed +'.nc')
 print("Complete - Preprocessed file saved to the dropbox folder")
 
@@ -188,6 +190,8 @@ temp = temp.to_dataset()
 temp = temp.rename({'Band1': 'Monthly_Resolution_Abs'})
 #resolution_mo = resolution_mo.assign_coords(month = (resolution_mo.time.dt.month))
 temp_resampled_taskable = temp.sel(month=resolution_mo.time.dt.month)
+temp_resampled_taskable = temp_resampled_taskable.rio.write_crs("EPSG:4326")
+temp_resampled_taskable = temp_resampled_taskable.rio.clip(mo_basin.geometry, "EPSG:4326")
 
 print("Complete - Preprocessing for taskable")
 
