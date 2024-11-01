@@ -30,6 +30,8 @@ path_nc = os.getenv('path_nc')
 path_shp = os.getenv('path_shp')
 path_preprocessed = os.getenv('path_preprocessed')
 file_name_preprocessed = 'preprocessed_snow_cover.nc'
+path_efficiency = os.getenv('path_efficiency')
+file_name_efficiency = 'efficiency_snow_cover.nc'
 
 # Each data has a code number that can be conveniently used to download data, first login to the earthacess account
 
@@ -109,3 +111,31 @@ temp = temp.rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
 temp_resampled = temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
 temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed)
 print("Completed - the preprocessed snow cover file has been saved to the Dropbox folder")
+
+# Computing efficiency
+
+import sys
+import os
+sys.path.append(os.path.abspath("../src"))
+
+# importing common function from sos_tools
+
+import sos_tools
+from sos_tools.efficiency import efficiency
+
+# Importing input parameters from Configuration file
+
+from configparser import ConfigParser
+
+config = ConfigParser()
+config.read("Input_parameters.ini")
+print(config.sections())
+
+config_data = config['Snow_cover'] 
+T = config_data['threshold']
+k = config_data['coefficient']
+
+# Caliing the efficiency function and passing the input parameters
+
+efficiency_output = efficiency(T,-k,temp_resampled)
+efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')

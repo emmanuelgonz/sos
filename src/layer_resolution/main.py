@@ -36,6 +36,8 @@ path_shp = os.getenv('path_shp')
 path_preprocessed = os.getenv('path_preprocessed')
 file_name_preprocessed = 'preprocessed_resolution.nc'
 raw_path = os.getenv('raw_path')
+path_efficiency = os.getenv('path_efficiency')
+file_name_efficiency = 'efficiency_resolution.nc'
 
 # Downloading SNODAS data
 # define the date range over which to prepare data
@@ -172,3 +174,35 @@ temp = temp.rename({'Band1': 'Monthly_Resolution_Abs'})
 temp_resampled = temp.sel(month=resolution_mo.time.dt.month)
 temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed)
 print("Complete - Preprocessed file saved to the dropbox folder")
+
+
+
+# Computing efficiency
+
+import sys
+import os
+sys.path.append(os.path.abspath("../src"))
+
+# importing common function from sos_tools
+
+import sos_tools
+from sos_tools.efficiency import efficiency
+
+# Importing input parameters from Configuration file
+
+from configparser import ConfigParser
+
+config = ConfigParser()
+config.read("Input_parameters.ini")
+print(config.sections())
+
+config_data = config['Resolution'] 
+T = config_data['threshold']
+k = config_data['coefficient']
+
+# Caliing the efficiency function and passing the input parameters
+
+efficiency_output = efficiency(T,k,temp_resampled)
+efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')
+
+

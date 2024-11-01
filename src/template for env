@@ -6,6 +6,7 @@ path_hdf =\\SOS Planning\\Downloaded_files\\Snow_cover_raw\\hdf
 path_nc = \\SOS Planning\\Downloaded_files\\Snow_cover_raw\\nc\\
 path_shp =\\SOS Planning\\Downloaded_files\\Mo_basin_shp\\
 path_preprocessed =\\SOS Planning\\Preprocessed_files\\
+path_efficiency =\\SOS Planning\\Efficiency_files\\Efficiency_high_resolution_Caesium\\
 
 # PREPROCESSING RESOLUTION
 raw_path =\\SOS Planning\\Downloaded_files\\Resolution_raw\\
