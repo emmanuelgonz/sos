@@ -12,7 +12,8 @@ config["DEFAULT"] = {
 
 config["Resolution"] = {
     "Threshold": 40,
-    "Coefficient": 0.003
+    "Coefficient": 0.003,
+    "Factor_for_resampling": 5
 }
 
 config["Snow_cover"] = {
