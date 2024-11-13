@@ -1,29 +1,31 @@
 # Preprocessing Snow cover
 # Importing the required libraries
 
+import os
+import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import earthaccess
 import xarray as xr
 import rioxarray as rxr
-import os
+
 #import regex as rgx
 from datetime import datetime,date,timedelta
 import dask
 import glob
 import geopandas as gpd
 from shapely.geometry import Polygon
-import os
 import requests
 import zipfile
-
+from configparser import ConfigParser
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from sos_tools.efficiency import efficiency
+from dotenv import load_dotenv, dotenv_values
 
 # loading environment file for using the file path
-
-from dotenv import load_dotenv
-import os
-load_dotenv('C:\\Users\\dramach6\\OneDrive - Arizona State University\\Documents\\sos\\src\\.env')
+# load_dotenv('/mnt/c/Users/emgonz38/OneDrive - Arizona State University/ubuntu_files/work/code/git_repos/sos/.env')
+load_dotenv()
 
 path_hdf = os.getenv('path_hdf')
 path_nc = os.getenv('path_nc')
@@ -64,7 +66,7 @@ for filename in os.listdir(path_hdf):
 
     dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
     time_sc.append(dates)
-    f_nc = xr.open_dataset(path_hdf +'\\' + filename,engine = 'netcdf4')  
+    f_nc = xr.open_dataset(os.path.join(path_hdf, filename),engine = 'netcdf4')  
     snow = f_nc['Day_CMG_Snow_Cover']
     temp_arr = xr.DataArray(
     data=snow,
@@ -115,20 +117,7 @@ temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed+ '.nc')
 print("Completed - the preprocessed snow cover file has been saved to the Dropbox folder")
 
 # Computing efficiency
-
-import sys
-import os
-sys.path.append(os.path.abspath("../src"))
-
-# importing common function from sos_tools
-
-import sos_tools
-from sos_tools.efficiency import efficiency
-
 # Importing input parameters from Configuration file
-
-from configparser import ConfigParser
-
 config = ConfigParser()
 config.read("Input_parameters.ini")
 print(config.sections())
@@ -141,3 +130,4 @@ print(type(k))
 
 efficiency_output = efficiency(T,k,temp_resampled)
 efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')
+print("ALL STEPS COMPLETED")
