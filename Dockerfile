@@ -23,7 +23,6 @@ RUN apt-get update && apt-get install -y \
     curl \
     gnupg2 \
     libnetcdf-dev \
-    # libhdf4-alt-dev \
     libhdf4-dev \
     libhdf5-dev \
     build-essential \
@@ -43,12 +42,6 @@ RUN apt-get install -y gdal-bin libgdal-dev proj-bin proj-data
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-# # Install Python packages
-# RUN pip3 install GDAL==3.6.4
-# RUN pip3 install -r /opt/requirements.txt
-
-# ENTRYPOINT [ "/usr/bin/python3", "/opt/src/layer_snow_cover/main.py" ]
-
 # Install Miniconda
 RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh \
     && bash /opt/miniconda.sh -b -p /opt/miniconda \
@@ -66,7 +59,7 @@ RUN /bin/bash -c "source activate sos_test \
     && pip install -r /opt/requirements.txt \
     && conda install xarray netcdf4 -y \
     && conda install conda-forge::rioxarray -y"
-    # && conda install conda-forge::regex -y"
 
 # Set the entrypoint
-ENTRYPOINT [ "/opt/miniconda/envs/sos_test/bin/python", "/opt/src/layer_snow_cover/main.py" ]
+# ENTRYPOINT [ "/opt/miniconda/envs/sos_test/bin/python", "/opt/src/layer_snow_cover/main.py" ]
+ENTRYPOINT [ "/opt/miniconda/envs/sos_test/bin/python", "/opt/src/layer_resolution/main.py" ]
