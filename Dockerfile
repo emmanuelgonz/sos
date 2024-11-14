@@ -60,6 +60,9 @@ RUN /bin/bash -c "source activate sos_test \
     && conda install xarray netcdf4 -y \
     && conda install conda-forge::rioxarray -y"
 
+# Copy the entrypoint script
+COPY entrypoint.sh /opt/entrypoint.sh
+RUN chmod +x /opt/entrypoint.sh
+
 # Set the entrypoint
-# ENTRYPOINT [ "/opt/miniconda/envs/sos_test/bin/python", "/opt/src/layer_snow_cover/main.py" ]
-ENTRYPOINT [ "/opt/miniconda/envs/sos_test/bin/python", "/opt/src/layer_resolution/main.py" ]
+ENTRYPOINT [ "/opt/entrypoint.sh" ]
