@@ -6,6 +6,7 @@ import earthaccess
 import xarray as xr
 import rioxarray as rxr
 import os
+import sys
 import regex as rgx
 from datetime import datetime,date,timedelta
 import dask
@@ -15,21 +16,20 @@ from shapely.geometry import Polygon
 from rasterio.enums import Resampling
 from datetime import datetime
 import gzip
-import os
 import requests
 import shutil
 import tarfile
 import tempfile
-from osgeo import gdal # pylint: disable=unused-import
+# from osgeo import gdal # pylint: disable=unused-import
 import pandas as pd
 from datetime import datetime, timezone
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from sos_tools.efficiency import efficiency
+from dotenv import load_dotenv
 
 # loading environment file for using the file path
-
-from dotenv import load_dotenv
-import os
-load_dotenv('C:\\Users\\dramach6\\OneDrive - Arizona State University\\Documents\\sos\\src\\.env')
-
+# load_dotenv('C:\\Users\\dramach6\\OneDrive - Arizona State University\\Documents\\sos\\src\\.env')
+load_dotenv()
 
 # Defining paths
 path_shp = os.getenv('path_shp')
@@ -204,9 +204,6 @@ sys.path.append(os.path.abspath("../src"))
 
 # importing common function from sos_tools
 
-import sos_tools
-from sos_tools.efficiency import efficiency
-
 # Importing input parameters from Configuration file
 
 from configparser import ConfigParser
@@ -229,4 +226,4 @@ efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')
 
 efficiency_output = efficiency(T,k,temp_resampled_taskable)
 efficiency_output.to_netcdf(path_efficiency + file_name_efficiency_taskable + '.nc')
-
+print("ALL STEPS COMPLETED")
