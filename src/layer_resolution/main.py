@@ -7,7 +7,7 @@ import xarray as xr
 import rioxarray as rxr
 import os
 import sys
-import regex as rgx
+# import regex as rgx
 from datetime import datetime,date,timedelta
 import dask
 import glob
