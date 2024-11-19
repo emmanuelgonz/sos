@@ -12,6 +12,7 @@ RUN apt-get -o Acquire::Check-Valid-Until=false -o Acquire::Check-Date=false upd
 # Add necessary dependencies
 RUN apt-get update && apt-get install -y \
     wget \
+    unzip \
     software-properties-common \
     libgdbm-dev \
     libc6-dev \
@@ -59,6 +60,11 @@ RUN /bin/bash -c "source activate sos_test \
     && pip install -r /opt/requirements.txt \
     && conda install xarray netcdf4 -y \
     && conda install conda-forge::rioxarray -y"
+
+RUN /bin/bash -c "wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip  \
+    && unzip main.zip \
+    && cd nost-tools-main \
+    && pip install -e ."
 
 # Copy the entrypoint script
 COPY entrypoint.sh /opt/entrypoint.sh

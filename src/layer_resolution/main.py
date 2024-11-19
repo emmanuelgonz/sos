@@ -128,7 +128,7 @@ ds = xr.combine_by_coords(
                 snodas_dir, 
                 f"us_ssmv11034tS__T0001TTNATS{date.strftime('%Y')}{date.strftime('%m')}{date.strftime('%d')}05HP001.nc"
             )
-        ).drop_vars("band").assign_coords(time=date).expand_dims(dim="time")
+        ).drop_vars("band", errors='ignore').assign_coords(time=date).expand_dims(dim="time")
         for date in dates
     ], 
     combine_attrs="drop_conflicts"
