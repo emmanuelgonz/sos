@@ -5,16 +5,28 @@ import pandas as pd
 import numpy as np
 import xarray as xr
 import rioxarray as rxr
-import dask as dask
 import earthaccess
 import geopandas as gpd
 from shapely.geometry import Polygon
 from datetime import datetime
-import dask.array as da
+import dask as dask
 from configparser import ConfigParser
 from dotenv import load_dotenv
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from sos_tools.efficiency import efficiency
+import matplotlib.pyplot as plt
+from PIL import Image
+import io
+import base64
+# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# from sos_tools.efficiency import efficiency
+
+from nost_tools.application_utils import ConnectionConfig, ShutDownObserver
+from nost_tools.entity import Entity
+from nost_tools.managed_application import ManagedApplication
+from nost_tools.publisher import WallclockTimeIntervalPublisher
+
+def efficiency(T,k,datarray):
+    resolution_eta = 1 / (1 + np.exp(k * (datarray - T)))       
+    return resolution_eta
 
 def load_config() -> Tuple[str, ...]:
     """Load environment variables and return paths"""
@@ -85,6 +97,25 @@ def get_missouri_basin(path_shp: str) -> gpd.GeoSeries:
     mo_basin = gpd.read_file(os.path.join(path_shp, "WBD_10_HU2_Shape/Shape/WBDHU2.shp"))
     return gpd.GeoSeries(Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326")
 
+# def process_snow_layer(path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed: str) -> xr.Dataset:
+#     """Process snow layer data"""
+#     snow_layer = rxr.open_rasterio(
+#         os.path.join(path_nc, "snowcover-merged.nc"),
+#         chunks={'x': 1000, 'y': 1000}
+#     ).rio.write_crs("EPSG:4326")
+    
+#     snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
+#     snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
+    
+#     temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
+#     temp = temp.to_dataset().rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
+    
+#     temp_resampled = (temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
+#                      .rio.write_crs("EPSG:4326")
+#                      .rio.clip(mo_basin.geometry, "EPSG:4326"))
+    
+#     temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'))
+#     return temp_resampled
 def process_snow_layer(path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed: str) -> xr.Dataset:
     """Process snow layer data"""
     snow_layer = rxr.open_rasterio(
@@ -95,7 +126,8 @@ def process_snow_layer(path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed:
     snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
     snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
     
-    temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
+    # Calculate the average snow cover over the desired time period
+    temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).mean()
     temp = temp.to_dataset().rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
     
     temp_resampled = (temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
@@ -105,7 +137,161 @@ def process_snow_layer(path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed:
     temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'))
     return temp_resampled
 
+def open_polygons(geojson_path):
+
+    geojson = gpd.read_file(geojson_path)
+    polygons = geojson.geometry
+
+    print('Polygons loaded.')
+
+    return polygons
+
+def downsample_array(array, downsample_factor):
+    """
+    Downsamples the given array by the specified factor.
+
+    Args:
+        array (np.ndarray): The array to downsample.
+        downsample_factor (int): The factor by which to downsample the array.
+
+    Returns:
+        np.ndarray: The downsampled array.
+    """
+    return array[::downsample_factor, ::downsample_factor]
+
+def get_extents(dataset, variable):
+    # Extract the GeoTransform attribute
+    geo_transform = dataset['spatial_ref'].GeoTransform.split()
+    # Convert GeoTransform values to float
+    geo_transform = [float(value) for value in geo_transform]
+    # Calculate the extents (four corners)
+    min_x = geo_transform[0]
+    pixel_width = geo_transform[1]
+    max_y = geo_transform[3]
+    pixel_height = geo_transform[5]
+    # Get the actual dimensions of the raster layer
+    n_rows, n_cols = dataset[variable][0, :, :].shape
+    # Calculate the coordinates of the four corners
+    top_left = (min_x, max_y)
+    top_right = (min_x + n_cols * pixel_width, max_y)
+    bottom_left = (min_x, max_y + n_rows * pixel_height)
+    bottom_right = (min_x + n_cols * pixel_width, max_y + n_rows * pixel_height)
+    return top_left, top_right, bottom_left, bottom_right
+
+# def encode(dataset, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
+#     # Follow rest of code
+#     polygons = open_polygons(geojson_path=geojson_path)
+    
+#     # Get correct variable
+#     raster_layer = dataset[variable]
+
+#     # Clip the raster layer to the polygon geometry
+#     raster_layer = raster_layer.rio.write_crs("EPSG:4326")  # Ensure the CRS is set
+#     clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
+
+#     # Extract array
+#     if scale == 'time':
+#         # raster_layer = clipped_layer.isel(time=time_step).values
+#         raster_layer = clipped_layer.sel(time=clipped_layer['time'] == time_step).values
+#     elif scale == 'week':
+#         # raster_layer = clipped_layer.isel(week=time_step).values
+#         raster_layer = clipped_layer.sel(time=clipped_layer['week'] == time_step).values
+#     elif scale == 'month':
+#         # raster_layer = clipped_layer.isel(month=time_step).values
+#         raster_layer = clipped_layer.sel(time=clipped_layer['month'] == time_step).values
+
+#     # Downsample the array
+#     raster_layer = downsample_array(raster_layer, downsample_factor=downsample_factor)
+
+#     # Normalize the array to the range [0, 1]
+#     raster_layer_min = np.nanmin(raster_layer)
+#     raster_layer_max = np.nanmax(raster_layer)
+
+#     # Create a mask for NA values
+#     na_mask = np.isnan(raster_layer)
+
+#     if raster_layer_max > raster_layer_min:  # Avoid division by zero
+#         normalized_layer = (raster_layer - raster_layer_min) / (raster_layer_max - raster_layer_min)
+#     else:
+#         normalized_layer = np.zeros_like(raster_layer)  # If all values are the same, set to zero
+
+#     # Apply the Blues colormap
+#     colormap = plt.get_cmap('Blues_r')
+#     rgba_image = colormap(normalized_layer)
+
+#     # Set the alpha channel: 0 for NA, 1 for others
+#     rgba_image[..., 3] = np.where(na_mask, 0, 1)
+
+#     # Convert to 8-bit unsigned integer
+#     rgba_image = (rgba_image * 255).astype(np.uint8)
+
+#     # Save the RGBA image
+#     image = Image.fromarray(rgba_image, 'RGBA')
+#     image.save(output_path)
+
+#     # Get the extents (four corners) coordinates
+#     top_left, top_right, bottom_left, bottom_right = get_extents(dataset, variable=variable)
+
+#     # Save the image to a BytesIO object
+#     buffered = io.BytesIO()
+#     image.save(buffered, format="PNG")
+
+#     # Encode image to base64
+#     raster_layer_encoded = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+#     return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
+def encode(dataset, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
+    polygons = open_polygons(geojson_path=geojson_path)
+    
+    raster_layer = dataset[variable]
+
+    raster_layer = raster_layer.rio.write_crs("EPSG:4326")
+    clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
+    print(clipped_layer)
+    if scale == 'time':
+        raster_layer = clipped_layer.sel(time=time_step)
+        # raster_layer = clipped_layer.isel(time=time_step).values
+        # raster_layer = clipped_layer.sel(time=clipped_layer['time'] == time_step).values
+    elif scale == 'week':
+        raster_layer = clipped_layer.isel(week=time_step).values
+        # raster_layer = clipped_layer.sel(week=clipped_layer['week'] == time_step).values
+    elif scale == 'month':
+        raster_layer = clipped_layer.isel(month=time_step).values
+        # raster_layer = clipped_layer.sel(month=clipped_layer['month'] == time_step).values
+    
+    raster_layer = downsample_array(raster_layer, downsample_factor=downsample_factor)
+
+    raster_layer_min = np.nanmin(raster_layer)
+    raster_layer_max = np.nanmax(raster_layer)
+
+    na_mask = np.isnan(raster_layer)
+
+    if raster_layer_max > raster_layer_min:
+        normalized_layer = (raster_layer - raster_layer_min) / (raster_layer_max - raster_layer_min)
+    else:
+        normalized_layer = np.zeros_like(raster_layer)
+
+    colormap = plt.get_cmap('Blues_r')
+    rgba_image = colormap(normalized_layer)
+
+    rgba_image[..., 3] = np.where(na_mask, 0, 1)
+
+    rgba_image = (rgba_image * 255).astype(np.uint8)
+
+    image = Image.fromarray(rgba_image, 'RGBA')
+    image.save(output_path)
+
+    top_left, top_right, bottom_left, bottom_right = get_extents(dataset, variable=variable)
+
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+
+    raster_layer_encoded = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+    return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
+
 def main():
+
     # Load configurations
     path_hdf, path_nc, path_shp, path_preprocessed, path_efficiency = load_config()
     
@@ -123,7 +309,7 @@ def main():
     
     # Process snow layer
     temp_resampled = process_snow_layer(path_nc, mo_basin, path_preprocessed)
-    
+
     # Compute efficiency
     config = ConfigParser()
     config.read("Input_parameters.ini")
@@ -131,144 +317,18 @@ def main():
     T = float(config_data['threshold'])
     k = -float(config_data['coefficient'])
     
-    efficiency_output = efficiency(T, k, temp_resampled)
-    efficiency_output.to_netcdf(os.path.join(path_efficiency, 'efficiency_snow_cover.nc'))
-    print("Processing completed successfully")
+    # efficiency_output = efficiency(T, k, temp_resampled)
+    # efficiency_output.to_netcdf(os.path.join(path_efficiency, 'efficiency_snow_cover.nc'))
+    dataset = efficiency(T, k, temp_resampled)
+    dataset.to_netcdf(os.path.join(path_efficiency, 'efficiency_snow_cover.nc'))
 
+    snow_layer, top_left, top_right, bottom_left, bottom_right = encode(
+        dataset=dataset,
+        variable='Weekly_Snow_Cover',
+        output_path='snow_raster_layer.png',
+        scale='time',
+        time_step='2024-02-02',
+        geojson_path='WBD_10_HU2_4326.geojson')
+    
 if __name__ == "__main__":
     main()
-
-
-# # Preprocessing Snow cover
-# # Importing the required libraries
-
-# import os
-# import sys
-# import pandas as pd
-# import numpy as np
-# import matplotlib.pyplot as plt
-# import earthaccess
-# import xarray as xr
-# import rioxarray as rxr
-
-# #import regex as rgx
-# from datetime import datetime,date,timedelta
-# import dask
-# import glob
-# import geopandas as gpd
-# from shapely.geometry import Polygon
-# import requests
-# import zipfile
-# from configparser import ConfigParser
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-# from sos_tools.efficiency import efficiency
-# from dotenv import load_dotenv, dotenv_values
-
-# # loading environment file for using the file path
-# # load_dotenv('/mnt/c/Users/emgonz38/OneDrive - Arizona State University/ubuntu_files/work/code/git_repos/sos/.env')
-# load_dotenv()
-
-# path_hdf = os.getenv('path_hdf')
-# path_nc = os.getenv('path_nc')
-# path_shp = os.getenv('path_shp')
-# path_preprocessed = os.getenv('path_preprocessed')
-# file_name_preprocessed = 'preprocessed_snow_cover'
-# path_efficiency = os.getenv('path_efficiency')
-# file_name_efficiency = 'efficiency_snow_cover'
-
-# # Each data has a code number that can be conveniently used to download data, first login to the earthacess account
-
-# # Downloading Data from earthaccess
-# # 1. Logging in
-# earthaccess.login(strategy="environment")
-# # 2. Search
-# results = earthaccess.search_data(
-#     short_name = 'MOD10C1',
-#     temporal = ("2024.01.01","2024.02.2")
-# )
-# files = earthaccess.download(results,path_hdf)
-
-# # Data prerpocessing
-
-# # Code to loop through file in the folder, add date component, convert to netcdf, and collate to one data set
-# # Code for Snow Cover
-
-# ctr = 0
-# lon = np.linspace(-180,180,7200)
-# lat = np.flip(np.linspace(-90,90,3600))
-# time_sc = []
-
-# for filename in os.listdir(path_hdf):    
-#     year = filename[9:13]
-#     day = filename[13:16]
-#     name = filename[0:34]
-
-#     # converting day of year to time
-
-#     dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
-#     time_sc.append(dates)
-#     f_nc = xr.open_dataset(os.path.join(path_hdf, filename),engine = 'netcdf4')  
-#     snow = f_nc['Day_CMG_Snow_Cover']
-#     temp_arr = xr.DataArray(
-#     data=snow,
-#     dims=['lat','lon'],
-#     coords=dict(
-#         lon = lon,
-#         lat = lat,
-#     )
-#     )
-#     temp_arr.to_netcdf(path_nc + name + ".nc")
-#     files = glob.glob(os.path.join(path_nc,"*.nc"))
-#     print(glob.glob(os.path.join(path_nc,"*.nc")))
-
-# # Merged code
-
-# print("Writing snowcover-merged.nc")
-# ds = xr.combine_by_coords(
-#     [        
-#         rxr.open_rasterio(files[i]).drop_vars("band", errors="ignore").assign_coords(time=time_sc[i]).expand_dims(dim="time")         
-#          for i in range(len(time_sc))            
-        
-#     ], 
-#     combine_attrs="drop_conflicts"
-# )
-# ds = ds.rio.write_crs("EPSG:4326")
-# ds.to_netcdf(os.path.join(path_nc, "snowcover-merged.nc"))
-# print("Completed writing snowcover-merged")
-
-# print("Reading mo_basin file and clipping")
-# # Access us states shapefile
-# us_map = gpd.read_file("https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_20m.zip")
-# conus = us_map[~us_map.STUSPS.isin(["AK", "HI", "PR"])].to_crs("EPSG:4326")
-# mo_basin = gpd.read_file(path_shp+"WBD_10_HU2_Shape/Shape/WBDHU2.shp")
-# mo_basin = gpd.GeoSeries(Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326")
-
-# print("Final data wrangling - groupby and joins")
-# # Opening the merged netcdf files
-# snow_layer = rxr.open_rasterio(os.path.join(path_nc,"snowcover-merged.nc"),crs = "EPSG:4326")
-# snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
-# snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
-# temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
-# temp = temp.to_dataset()
-# temp = temp.rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
-# temp_resampled = temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
-# temp_resampled = temp_resampled.rio.write_crs("EPSG:4326")
-# temp_resampled = temp_resampled.rio.clip(mo_basin.geometry, "EPSG:4326")
-# temp_resampled.to_netcdf(path_preprocessed + file_name_preprocessed+ '.nc')
-# print("Completed - the preprocessed snow cover file has been saved to the Dropbox folder")
-
-# # Computing efficiency
-# # Importing input parameters from Configuration file
-# config = ConfigParser()
-# config.read("Input_parameters.ini")
-# print(config.sections())
-
-# config_data = config['Snow_cover'] 
-# T = float(config_data['threshold'])
-# k = (-1)*float(config_data['coefficient'])
-# print(type(k))
-# # Caliing the efficiency function and passing the input parameters
-
-# efficiency_output = efficiency(T,k,temp_resampled)
-# efficiency_output.to_netcdf(path_efficiency + file_name_efficiency + '.nc')
-# print("ALL STEPS COMPLETED")

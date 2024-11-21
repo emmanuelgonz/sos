@@ -59,16 +59,15 @@ RUN conda create --name sos_test python=${PYTHON_VERSION} -y \
 RUN /bin/bash -c "source activate sos_test \
     && pip install -r /opt/requirements.txt \
     && conda install xarray netcdf4 -y \
-    && conda install conda-forge::rioxarray -y"
-
-RUN /bin/bash -c "wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip  \
+    && conda install conda-forge::rioxarray -y \
+    && wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
     && unzip main.zip \
     && cd nost-tools-main \
     && pip install -e ."
 
-# Copy the entrypoint script
-COPY entrypoint.sh /opt/entrypoint.sh
-RUN chmod +x /opt/entrypoint.sh
+# # Copy the entrypoint script
+# COPY entrypoint.sh /opt/entrypoint.sh
+# RUN chmod +x /opt/entrypoint.sh
 
-# Set the entrypoint
-ENTRYPOINT [ "/opt/entrypoint.sh" ]
+# # Set the entrypoint
+# ENTRYPOINT [ "/opt/entrypoint.sh" ]
