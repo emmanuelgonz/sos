@@ -396,17 +396,17 @@ if __name__ == "__main__":
 
     # Initialize PositionPublisher and read layers
     position_publisher = PositionPublisher(app, constellation, timedelta(seconds=1))
-    snow_layer, resolution_layer, gcom_layer, capella_layer, top_left, top_right, bottom_left, bottom_right = read_and_encode_layers(position_publisher)
+    # snow_layer, resolution_layer, gcom_layer, capella_layer, top_left, top_right, bottom_left, bottom_right = read_and_encode_layers(position_publisher)
     
-    # Pass the layers to the PositionPublisher
-    position_publisher.snow_layer = snow_layer
-    position_publisher.resolution_layer = resolution_layer
-    position_publisher.gcom_layer = gcom_layer
-    position_publisher.capella_layer = capella_layer
-    position_publisher.top_left = top_left
-    position_publisher.top_right = top_right
-    position_publisher.bottom_left = bottom_left
-    position_publisher.bottom_right = bottom_right
+    # # Pass the layers to the PositionPublisher
+    # position_publisher.snow_layer = snow_layer
+    # position_publisher.resolution_layer = resolution_layer
+    # position_publisher.gcom_layer = gcom_layer
+    # position_publisher.capella_layer = capella_layer
+    # position_publisher.top_left = top_left
+    # position_publisher.top_right = top_right
+    # position_publisher.bottom_left = bottom_left
+    # position_publisher.bottom_right = bottom_right
 
     app.simulator.add_observer(position_publisher)
 
