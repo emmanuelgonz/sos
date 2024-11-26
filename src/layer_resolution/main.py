@@ -16,13 +16,13 @@ from datetime import datetime, timezone
 from rasterio.enums import Resampling
 from configparser import ConfigParser
 from dotenv import load_dotenv
-# sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-# from sos_tools.efficiency import efficiency
-
 from nost_tools.application_utils import ConnectionConfig, ShutDownObserver
 from nost_tools.entity import Entity
 from nost_tools.managed_application import ManagedApplication
 from nost_tools.publisher import WallclockTimeIntervalPublisher
+
+from constellation_config_files.schemas import SatelliteStatus, SnowLayer, ResolutionLayer, GcomLayer, CapellaLayer
+from constellation_config_files.config import PREFIX, NAME, SCALE, TLES, FIELD_OF_REGARD
 
 def efficiency(T,k,datarray):
     resolution_eta = 1 / (1 + np.exp(k * (datarray - T)))       

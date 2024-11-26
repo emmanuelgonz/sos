@@ -36,38 +36,37 @@ RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update && apt-get install -
 
 # Install GDAL
 RUN add-apt-repository ppa:ubuntugis/ppa && apt-get update
-RUN apt-get update
 RUN apt-get install -y gdal-bin libgdal-dev proj-bin proj-data
 
 # Set environment variables for GDAL
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-# Install Miniconda
-RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh \
-    && bash /opt/miniconda.sh -b -p /opt/miniconda \
-    && rm /opt/miniconda.sh
-
-# Add conda to PATH
-ENV PATH=/opt/miniconda/bin:$PATH
-
-# Create and activate conda environment
-RUN conda create --name sos_test python=${PYTHON_VERSION} -y \
-    && conda clean -a -y
-
-# Activate the environment and install dependencies
-RUN /bin/bash -c "source activate sos_test \
-    && pip install -r /opt/requirements.txt \
-    && conda install xarray netcdf4 -y \
-    && conda install conda-forge::rioxarray -y \
-    && wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
+RUN python3 -m pip install --upgrade pip
+RUN python3 -m pip install -r /opt/requirements.txt
+RUN wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
     && unzip main.zip \
     && cd nost-tools-main \
-    && pip install -e ."
+    && python3 -m pip install -e .
 
-# # Copy the entrypoint script
-# COPY entrypoint.sh /opt/entrypoint.sh
-# RUN chmod +x /opt/entrypoint.sh
+# # Install Miniconda
+# RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh \
+#     && bash /opt/miniconda.sh -b -p /opt/miniconda \
+#     && rm /opt/miniconda.sh
 
-# # Set the entrypoint
-# ENTRYPOINT [ "/opt/entrypoint.sh" ]
+# # Add Miniconda to PATH
+# ENV PATH=/opt/miniconda/bin:$PATH
+
+# # Create and activate conda environment
+# RUN conda create --name sos python=${PYTHON_VERSION} -y \
+#     && conda clean -a -y
+
+# # Activate the conda environment and install dependencies
+# RUN /bin/bash -c "source activate sos \
+#     && pip install -r /opt/requirements.txt \
+#     && conda install xarray netcdf4 -y \
+#     && conda install conda-forge::rioxarray -y \
+#     && wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
+#     && unzip main.zip \
+#     && cd nost-tools-main \
+#     && pip install -e ."
