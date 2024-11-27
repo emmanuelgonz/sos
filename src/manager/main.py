@@ -71,5 +71,5 @@ if __name__ == "__main__":
         time_status_step=timedelta(seconds=1) * SCALE,         # optional duration between time status 'heartbeat' messages
         time_status_init=datetime(2024, 1, 7, tzinfo=timezone.utc),  # optional initial scenario datetime to start publishing time status 'heartbeat' messages
         command_lead=timedelta(seconds=5),                     # lead time before a scheduled update or stop command
-        required_apps=['constellation', 'layer']
+        required_apps=['layer'] #'constellation', 
     )

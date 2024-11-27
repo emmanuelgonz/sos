@@ -9,7 +9,7 @@ import earthaccess
 import geopandas as gpd
 from shapely.geometry import Polygon
 from datetime import datetime, timedelta, timezone
-# import dask as dask
+import dask as dask
 from configparser import ConfigParser
 from dotenv import load_dotenv
 from dotenv import dotenv_values
@@ -100,6 +100,38 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
     #     logger.info("Downloading snow data successfully completed.")
     #     return earthaccess.download(results, path_hdf)
 
+    # def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
+    #     """Process HDF files to NetCDF with dask parallelization"""
+    #     logger.info("Processing snow files.")
+    #     lon = np.linspace(-180, 180, 7200)
+    #     lat = np.flip(np.linspace(-90, 90, 3600))
+    #     files = []
+    #     time_sc = []
+
+    #     for filename in os.listdir(path_hdf):    
+    #         year = filename[9:13]
+    #         day = filename[13:16]
+    #         name = filename[0:34]
+
+    #         # converting day of year to time
+
+    #         dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
+    #         time_sc.append(dates)
+    #         f_nc = xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') #path_hdf +'\\' + filename,engine = 'netcdf4')  
+    #         snow = f_nc['Day_CMG_Snow_Cover']
+    #         temp_arr = xr.DataArray(
+    #         data=snow,
+    #         dims=['lat','lon'],
+    #         coords=dict(
+    #             lon = lon,
+    #             lat = lat,
+    #         )
+    #         )
+    #         temp_arr.to_netcdf(path_nc + name + ".nc")
+    #         files = glob.glob(os.path.join(path_nc,"*.nc"))
+    #         logger.info("Processing snow files successfully completed.")
+                
+    #     return files, time_sc
     def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
         """Process HDF files to NetCDF with dask parallelization"""
         logger.info("Processing snow files.")
@@ -114,23 +146,25 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
             name = filename[0:34]
 
             # converting day of year to time
-
-            dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
+            dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
             time_sc.append(dates)
-            f_nc = xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') #path_hdf +'\\' + filename,engine = 'netcdf4')  
-            snow = f_nc['Day_CMG_Snow_Cover']
-            temp_arr = xr.DataArray(
-            data=snow,
-            dims=['lat','lon'],
-            coords=dict(
-                lon = lon,
-                lat = lat,
-            )
-            )
-            temp_arr.to_netcdf(path_nc + name + ".nc")
-            files = glob.glob(os.path.join(path_nc,"*.nc"))
+            
+            # Using context manager to ensure the file is closed
+            with xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') as f_nc:
+                snow = f_nc['Day_CMG_Snow_Cover']
+                temp_arr = xr.DataArray(
+                    data=snow,
+                    dims=['lat', 'lon'],
+                    coords=dict(
+                        lon=lon,
+                        lat=lat,
+                    )
+                )
+                temp_arr.to_netcdf(os.path.join(path_nc, name + ".nc"))
+            
+            files = glob.glob(os.path.join(path_nc, "*.nc"))
             logger.info("Processing snow files successfully completed.")
-                
+                    
         return files, time_sc
 
     # def merge_netcdf_files(self, files: List[str], time_sc: List[datetime], path_nc: str) -> xr.Dataset:
@@ -151,7 +185,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         logger.info("Merging NetCDF files.")
         ds = xr.combine_by_coords(
             [        
-                rxr.open_rasterio(files[i]).drop_vars("band", errors="ignore").assign_coords(time=time_sc[i]).expand_dims(dim="time")         
+                rxr.open_rasterio(files[i]).drop_vars("band").assign_coords(time=time_sc[i]).expand_dims(dim="time")         
                 for i in range(len(time_sc))            
                 
             ], 
@@ -159,7 +193,8 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         )
         ds = ds.rio.write_crs("EPSG:4326")
         ds.to_netcdf(os.path.join(path_nc, "snowcover-merged.nc"))
-        logger.info(f"Merging NetCDF files successfully completed: {path_nc}.")
+        logger.info(f"Merging NetCDF files successfully completed.")
+        logger.info(ds)
 
         return ds
     
@@ -175,8 +210,6 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
     # def process_snow_layer(self, path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed: str) -> xr.Dataset:
     #     """Process snow layer data"""
-
-    #     logger.info("Processing snow layer.")
     #     snow_layer = rxr.open_rasterio(
     #         os.path.join(path_nc, "snowcover-merged.nc"),
     #         chunks={'x': 1000, 'y': 1000}
@@ -193,31 +226,25 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
     #                     .rio.write_crs("EPSG:4326")
     #                     .rio.clip(mo_basin.geometry, "EPSG:4326"))
         
-    #     temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'))
-    #     logger.info("Processing snow layer successfully completed.")
-
+    #     temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'), engine='netcdf4') #'netcdf4')
     #     return temp_resampled
     def process_snow_layer(self, path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed: str) -> xr.Dataset:
-        """Process snow layer data"""
-        snow_layer = rxr.open_rasterio(
-            os.path.join(path_nc, "snowcover-merged.nc"),
-            chunks={'x': 1000, 'y': 1000}
-        ).rio.write_crs("EPSG:4326")
-        
+
+        logger.info("Processing snow layer.")
+        snow_layer = rxr.open_rasterio(os.path.join(path_nc,"snowcover-merged.nc"),crs = "EPSG:4326")
         snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
         snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
-        
-        # Calculate the average snow cover over the desired time period
-        temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max() #.mean()
-        temp = temp.to_dataset().rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
-        
-        temp_resampled = (temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
-                        .rio.write_crs("EPSG:4326")
-                        .rio.clip(mo_basin.geometry, "EPSG:4326"))
-        
-        temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'))
-        return temp_resampled
+        temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
+        temp = temp.to_dataset()
+        temp = temp.rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
+        temp_resampled = temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
+        temp_resampled = temp_resampled.rio.write_crs("EPSG:4326")
+        temp_resampled = temp_resampled.rio.clip(mo_basin.geometry, "EPSG:4326")
+        temp_resampled.to_netcdf(path_preprocessed + 'preprocessed_snow_cover' + '.nc')
+        logger.info("Processing snow layer completed successfully.")
 
+        return temp_resampled
+        
     def open_polygons(self, geojson_path):
         geojson = gpd.read_file(geojson_path)
         polygons = geojson.geometry
@@ -256,11 +283,12 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         bottom_right = (min_x + n_cols * pixel_width, max_y + n_rows * pixel_height)
         return top_left, top_right, bottom_left, bottom_right
 
-    # def encode(self, dataset, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
-
+    # def encode(self, file_path, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
     #     logger.info("Encoding raster layer.")
     #     polygons = self.open_polygons(geojson_path=geojson_path)
         
+    #     # Open the NetCDF file
+    #     dataset = self.open_netcdf(file_path) #, time_step)
     #     raster_layer = dataset[variable]
 
     #     raster_layer = raster_layer.rio.write_crs("EPSG:4326")
@@ -268,6 +296,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
     #     if scale == 'time':
     #         raster_layer = clipped_layer.sel(time=time_step)
+    #         # raster_layer = clipped_layer.isel(time=time_step).values
     #     # elif scale == 'week':
     #     #     raster_layer = clipped_layer.isel(week=time_step).values
     #     # elif scale == 'month':
@@ -275,23 +304,20 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
     #     logger.info("Date extraction successfully completed.")
         
-    #     raster_layer = self.downsample_array(raster_layer, downsample_factor=downsample_factor)
-    #     logger.info("Downsampling successfully completed.")
-
-    #     raster_layer = raster_layer.to_numpy()
-    #     logger.info("Conversion to numpy array successfully completed.")
+    #     # downsampled_array = self.downsample_array(raster_layer.values, downsample_factor=downsample_factor)
+    #     # logger.info("Downsampling successfully completed.")
 
     #     raster_layer_min = np.nanmin(raster_layer)
     #     raster_layer_max = np.nanmax(raster_layer)
-    #     logger.info("Min-max calculation successfully completed.")
 
     #     na_mask = np.isnan(raster_layer)
-    #     logger.info("NA value masking successfully completed.")
 
     #     if raster_layer_max > raster_layer_min:
     #         normalized_layer = (raster_layer - raster_layer_min) / (raster_layer_max - raster_layer_min)
     #     else:
     #         normalized_layer = np.zeros_like(raster_layer)
+        
+    #     logger.info('Layer normalization successfully completed.')
 
     #     colormap = plt.get_cmap('Blues_r')
     #     rgba_image = colormap(normalized_layer)
@@ -313,29 +339,24 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
     #     logger.info("Encoding raster layer successfully completed.")
 
     #     return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
-    def encode(self, file_path, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
-        logger.info("Encoding raster layer.")
+    def encode(self, dataset, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
+
+        logger.info('Encoding snow layer.')
         polygons = self.open_polygons(geojson_path=geojson_path)
         
-        # Open the NetCDF file
-        dataset = self.open_netcdf(file_path) #, time_step)
         raster_layer = dataset[variable]
 
         raster_layer = raster_layer.rio.write_crs("EPSG:4326")
         clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
-
+        print(clipped_layer)
         if scale == 'time':
             raster_layer = clipped_layer.sel(time=time_step)
-            # raster_layer = clipped_layer.isel(time=time_step).values
-        # elif scale == 'week':
-        #     raster_layer = clipped_layer.isel(week=time_step).values
-        # elif scale == 'month':
-        #     raster_layer = clipped_layer.isel(month=time_step).values
-
-        logger.info("Date extraction successfully completed.")
+        elif scale == 'week':
+            raster_layer = clipped_layer.isel(week=time_step).values
+        elif scale == 'month':
+            raster_layer = clipped_layer.isel(month=time_step).values
         
-        # downsampled_array = self.downsample_array(raster_layer.values, downsample_factor=downsample_factor)
-        # logger.info("Downsampling successfully completed.")
+        raster_layer = self.downsample_array(raster_layer, downsample_factor=downsample_factor)
 
         raster_layer_min = np.nanmin(raster_layer)
         raster_layer_max = np.nanmax(raster_layer)
@@ -346,8 +367,6 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
             normalized_layer = (raster_layer - raster_layer_min) / (raster_layer_max - raster_layer_min)
         else:
             normalized_layer = np.zeros_like(raster_layer)
-        
-        logger.info('Layer normalization successfully completed.')
 
         colormap = plt.get_cmap('Blues_r')
         rgba_image = colormap(normalized_layer)
@@ -366,65 +385,50 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
         raster_layer_encoded = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-        logger.info("Encoding raster layer successfully completed.")
+        logger.info('Encoding snow layer successfully completed.')
 
         return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
-        
+           
     def publish_message(self):
-        # current_time = self.constellation.ts.now().utc_datetime()
+
         current_time = self.constellation.get_time()
 
-        # # Assuming current_time is the datetime object
-        # current_time = datetime.strptime(str(current_time), "%Y-%m-%d %H:%M:%S%z")
-
-        # # Extracting the date part
-        # current_time = current_time.date()
-
-        elapsed_seconds = (current_time - self.time_status_init).total_seconds()
-        current_minute = (elapsed_seconds // 60) % 100
-        logger.info(f"Current time: {current_time.date()}")
-
-        ##############
         # Load configurations
         path_hdf, path_nc, path_shp, path_preprocessed, path_efficiency = self.load_config()
         
-        # # Download data
-        # self.download_snow_data(path_hdf, "2024.01.01", "2024.02.02")
+        # Process files
+        files, time_sc = self.process_snow_files(path_hdf, path_nc)
         
-        # # Process files
-        # files, time_sc = self.process_snow_files(path_hdf, path_nc)
+        # Merge files
+        self.merge_netcdf_files(files, time_sc, path_nc)
         
-        # # Merge files
-        # self.merge_netcdf_files(files, time_sc, path_nc)
-        
-        # # Get Missouri Basin
-        # mo_basin = self.get_missouri_basin(path_shp)
-        
-        # # Process snow layer
-        # temp_resampled = self.process_snow_layer(path_nc, mo_basin, path_preprocessed)
+        # Get Missouri Basin
+        mo_basin = self.get_missouri_basin(path_shp)
 
+        # Process snow layer
+        temp_resampled = self.process_snow_layer(path_nc, mo_basin, path_preprocessed)
 
-        # # Compute efficiency
-        # config = ConfigParser()
-        # config.read("Input_parameters.ini")
-        # config_data = config['Snow_cover']
-        # T = float(config_data['threshold'])
-        # k = -float(config_data['coefficient'])
+        # Compute efficiency
+        config = ConfigParser()
+        config.read("Input_parameters.ini")
+        config_data = config['Snow_cover']
+        T = float(config_data['threshold'])
+        k = -float(config_data['coefficient'])
         
-        # logger.info(path_efficiency)
-        # dataset = self.efficiency(T, k, temp_resampled)
-        # dataset.to_netcdf(os.path.join(path_efficiency, 'efficiency_snow_cover.nc'))
+        logger.info(path_efficiency)
+        dataset = self.efficiency(T, k, temp_resampled)
+        dataset.to_netcdf(os.path.join(path_efficiency, 'efficiency_snow_cover_up.nc'))
+        logger.info("Efficiency calculation successfully completed.")
 
         snow_layer, top_left, top_right, bottom_left, bottom_right = self.encode(
-            # dataset=dataset,
-            file_path=os.path.join(path_efficiency, 'efficiency_snow_cover.nc'),
+            dataset=dataset,
+            # file_path=os.path.join(path_efficiency, 'efficiency_snow_cover_up.nc'),
             variable='Weekly_Snow_Cover',
             output_path='snow_raster_layer.png',
             scale='time',
-            time_step=str(current_time.date()), #'2024-02-02',
+            time_step=str(current_time.date()),
             geojson_path='WBD_10_HU2_4326.geojson')
-        ##############
-
+        
         self.app.send_message(
             self.app.app_name,
             "snow_layer",
@@ -497,7 +501,7 @@ def main():
     app.simulator.add_observer(ShutDownObserver(app))
 
     # Initialize LayerPublisher
-    layer_publisher = LayerPublisher(app, constellation, timedelta(seconds=10))
+    layer_publisher = LayerPublisher(app, constellation, timedelta(seconds=120))
     # layer_publisher.snow_layer = snow_layer
     # layer_publisher.top_left = top_left
     # layer_publisher.top_right = top_right

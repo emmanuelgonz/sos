@@ -114,8 +114,11 @@ def process_snow_layer(path_nc: str, mo_basin: gpd.GeoSeries, path_preprocessed:
     temp_resampled = (temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
                      .rio.write_crs("EPSG:4326")
                      .rio.clip(mo_basin.geometry, "EPSG:4326"))
+
+    print(temp_resampled)
+    print(path_preprocessed)
     
-    temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'))
+    temp_resampled.to_netcdf(os.path.join(path_preprocessed, 'preprocessed_snow_cover.nc'), engine='netcdf4') #'netcdf4')
     return temp_resampled
 
 def open_polygons(geojson_path):

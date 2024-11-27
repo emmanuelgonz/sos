@@ -10,7 +10,7 @@ HEADER = {
     "description": f'Synchronizes a test case on the testbed on the "{PREFIX}/#" topic.',
 }
 
-SCALE = 20160 #120 #60
+SCALE = 60 #20160 #120 #60
 UPDATE = []
 # UPDATE = [
 #     TimeScaleUpdate(120.0, datetime(2020, 1, 1, 8, 20, 0, tzinfo=timezone.utc)),
