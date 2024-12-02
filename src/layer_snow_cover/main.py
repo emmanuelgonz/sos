@@ -97,40 +97,40 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         logger.info("Downloading snow data successfully completed.")
         return earthaccess.download(results, path_hdf, threads=1)
 
-    # def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
-    #     """Process HDF files to NetCDF with dask parallelization"""
-    #     logger.info("Processing snow files.")
-    #     lon = np.linspace(-180, 180, 7200)
-    #     lat = np.flip(np.linspace(-90, 90, 3600))
-    #     files = []
-    #     time_sc = []
+    def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
+        """Process HDF files to NetCDF with dask parallelization"""
+        logger.info("Processing snow files.")
+        lon = np.linspace(-180, 180, 7200)
+        lat = np.flip(np.linspace(-90, 90, 3600))
+        files = []
+        time_sc = []
 
-    #     for filename in os.listdir(path_hdf):    
-    #         year = filename[9:13]
-    #         day = filename[13:16]
-    #         name = filename[0:34]
+        for filename in os.listdir(path_hdf):    
+            year = filename[9:13]
+            day = filename[13:16]
+            name = filename[0:34]
 
-    #         # converting day of year to time
-    #         dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
-    #         time_sc.append(dates)
+            # converting day of year to time
+            dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
+            time_sc.append(dates)
             
-    #         # Using context manager to ensure the file is closed
-    #         with xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') as f_nc:
-    #             snow = f_nc['Day_CMG_Snow_Cover']
-    #             temp_arr = xr.DataArray(
-    #                 data=snow,
-    #                 dims=['lat', 'lon'],
-    #                 coords=dict(
-    #                     lon=lon,
-    #                     lat=lat,
-    #                 )
-    #             )
-    #             temp_arr.to_netcdf(os.path.join(path_nc, name + ".nc"))
+            # Using context manager to ensure the file is closed
+            with xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') as f_nc:
+                snow = f_nc['Day_CMG_Snow_Cover']
+                temp_arr = xr.DataArray(
+                    data=snow,
+                    dims=['lat', 'lon'],
+                    coords=dict(
+                        lon=lon,
+                        lat=lat,
+                    )
+                )
+                temp_arr.to_netcdf(os.path.join(path_nc, name + ".nc"))
             
-    #         files = glob.glob(os.path.join(path_nc, "*.nc"))
-    #         logger.info("Processing snow files successfully completed.")
+            files = glob.glob(os.path.join(path_nc, "*.nc"))
+            logger.info("Processing snow files successfully completed.")
                     
-    #     return files, time_sc
+        return files, time_sc
     # def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
     #     """Process HDF files to NetCDF with dask parallelization"""
     #     logger.info("Processing snow files.")
@@ -171,47 +171,47 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
     #         logger.info("Processing snow files successfully completed.")
                     
     #     return files, time_sc
-    def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
-        """Process HDF files to NetCDF with dask parallelization"""
-        logger.info("Processing snow files.")
-        lon = np.linspace(-180, 180, 7200)
-        lat = np.flip(np.linspace(-90, 90, 3600))
-        time_sc = []
+    # def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
+    #     """Process HDF files to NetCDF with dask parallelization"""
+    #     logger.info("Processing snow files.")
+    #     lon = np.linspace(-180, 180, 7200)
+    #     lat = np.flip(np.linspace(-90, 90, 3600))
+    #     time_sc = []
 
-        for filename in os.listdir(path_hdf):    
-            year = filename[9:13]
-            day = filename[13:16]
-            name = filename[0:34]
-            nc_file_path = os.path.join(path_nc, name + ".nc")
+    #     for filename in os.listdir(path_hdf):    
+    #         year = filename[9:13]
+    #         day = filename[13:16]
+    #         name = filename[0:34]
+    #         nc_file_path = os.path.join(path_nc, name + ".nc")
 
-            # Check if the NetCDF file already exists
-            if os.path.exists(nc_file_path):
-                logger.info(f"File {nc_file_path} already exists. Skipping processing.")
-                continue
+    #         # Check if the NetCDF file already exists
+    #         if os.path.exists(nc_file_path):
+    #             logger.info(f"File {nc_file_path} already exists. Skipping processing.")
+    #             continue
 
-            # Converting day of year to time
-            dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
-            time_sc.append(dates)
+    #         # Converting day of year to time
+    #         dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
+    #         time_sc.append(dates)
             
-            # Using context manager to ensure the file is closed
-            with xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') as f_nc:
-                snow = f_nc['Day_CMG_Snow_Cover']
-                temp_arr = xr.DataArray(
-                    data=snow,
-                    dims=['lat', 'lon'],
-                    coords=dict(
-                        lon=lon,
-                        lat=lat,
-                    )
-                )
-                temp_arr.to_netcdf(nc_file_path)
+    #         # Using context manager to ensure the file is closed
+    #         with xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') as f_nc:
+    #             snow = f_nc['Day_CMG_Snow_Cover']
+    #             temp_arr = xr.DataArray(
+    #                 data=snow,
+    #                 dims=['lat', 'lon'],
+    #                 coords=dict(
+    #                     lon=lon,
+    #                     lat=lat,
+    #                 )
+    #             )
+    #             temp_arr.to_netcdf(nc_file_path)
         
-        # Collect all NetCDF files in the directory after processing
-        files = glob.glob(os.path.join(path_nc, "*.nc"))
-        files = [file for file in files if "snowcover-merged.nc" not in file]
-        logger.info("Processing snow files successfully completed.")
+    #     # Collect all NetCDF files in the directory after processing
+    #     files = glob.glob(os.path.join(path_nc, "*.nc"))
+    #     files = [file for file in files if "snowcover-merged.nc" not in file]
+    #     logger.info("Processing snow files successfully completed.")
                     
-        return files, time_sc
+    #     return files, time_sc
     
     # def merge_netcdf_files(self, files: List[str], time_sc: List[datetime], path_nc: str) -> xr.Dataset:
     #     """Merge NetCDF files with dask"""
@@ -466,6 +466,12 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         temp_resampled.close()
         dataset.close()
         xr.backends.file_manager.FILE_CACHE.clear()
+
+        # Delete previous results
+        output_file = os.path.join(path_nc, "snowcover-merged.nc")
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            logger.info(f"Existing file {output_file} removed.")
         
 # def download_snow_data(path_hdf: str, start_date: str, end_date: str) -> List[str]:
 #     """Download snow cover data using earthaccess"""
