@@ -522,8 +522,8 @@ def main():
     app = ManagedApplication(NAME)
 
     # Load configurations
-    
     path_hdf, path_nc, path_shp, path_preprocessed, path_efficiency = load_config()
+    
     # # Download data
     # download_snow_data(path_hdf, "2024.01.01", "2024.02.02")
 
