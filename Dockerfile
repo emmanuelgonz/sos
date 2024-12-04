@@ -37,17 +37,24 @@ RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update && apt-get install -
 # Install GDAL
 RUN add-apt-repository ppa:ubuntugis/ppa && apt-get update
 RUN apt-get install -y gdal-bin libgdal-dev proj-bin proj-data
-
-# Set environment variables for GDAL
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
+#install AWS command line interface (CLI)
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install -i /usr/local/aws-cli -b /usr/local/bin \
+    && rm awscliv2.zip
+
+# Install Python dependencies
 RUN python3 -m pip install --upgrade pip
 RUN python3 -m pip install -r /opt/requirements.txt
 RUN wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
     && unzip main.zip \
     && cd nost-tools-main \
     && python3 -m pip install -e .
+
+# ENTRYPOINT ["/usr/local/bin/aws"]
 
 # # Install Miniconda
 # RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh \

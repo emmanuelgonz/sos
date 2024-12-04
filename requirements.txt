@@ -10,6 +10,7 @@ skyfield==1.49
 xarray==2023.6.0
 rioxarray==0.17.0
 netcdf4==1.6.2
+boto3==1.35.36
 
 # h5py==3.12.1
 # numpy==2.1.3
