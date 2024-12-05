@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   sos_manager:
     image: emmanuelgonzalez/sos_manager:latest
@@ -16,6 +14,12 @@ services:
 
   sos_snow_cover_layer:
     image: emmanuelgonzalez/sos_snow_cover_layer:latest
+    env_file: .env
+    volumes:
+      - ./data:/opt/data
+      
+  sos_resolution_layer:
+    image: emmanuelgonzalez/sos_resolution_layer:latest
     env_file: .env
     volumes:
       - ./data:/opt/data

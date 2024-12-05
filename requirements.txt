@@ -6,11 +6,17 @@ dask==2024.11.1
 geopandas==1.0.1
 python-dotenv==1.0.1
 skyfield==1.49
+boto3 
+h5py
+h5netcdf
 
-xarray==2023.6.0
-rioxarray==0.17.0
-netcdf4==1.6.2
-boto3==1.35.36
+# xarray==2024.11.0 #2023.6.0
+# rioxarray==0.17.0
+# netcdf4==1.6.2
+
+
+# h5netcdf==1.4.1
+# boto3==1.35.36
 
 # h5py==3.12.1
 # numpy==2.1.3

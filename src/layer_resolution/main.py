@@ -93,6 +93,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
     def download_snodas_data(self, start_date, end_date, raw_path):
         """Download SNODAS data for given date range"""
+        logger.info("Downloading SNODAS data.")
         dates = pd.date_range(start_date, end_date)
         snodas_dir = os.path.join(raw_path, "SNODAS")
         
@@ -107,7 +108,8 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
                 continue
                 
             self.process_snodas_date(date, file_label, snodas_dir)
-        
+        logger.info("Downloading SNODAS data successfully completed.")
+
         return snodas_dir, dates
 
     def process_snodas_date(self, date, file_label, snodas_dir):
@@ -170,7 +172,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
     def merge_snodas_files(self, snodas_dir, dates):
         """Merge individual SNODAS files into one NetCDF"""
-        print("Writing snodas-merged.nc")
+        logger.info("Merging NetCDF files.")
         ds = xr.combine_by_coords(
             [rxr.open_rasterio(
                 os.path.join(snodas_dir, 
@@ -180,15 +182,21 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
             combine_attrs="drop_conflicts"
         )
         ds.to_netcdf(os.path.join(snodas_dir, "snodas-merged.nc"))
+        logger.info(f"Merging NetCDF files successfully completed.")
         return ds
 
     def get_missouri_basin(self, path_shp):
         """Get Missouri Basin geometry"""
+
+        logger.info("Downloading Missouri Basin geometry.")
         mo_basin = gpd.read_file(path_shp + "WBD_10_HU2_Shape/Shape/WBDHU2.shp")
+        logger.info("Downloading Missouri Basin geometry successfully completed.")
+
         return gpd.GeoSeries(Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326")
 
     def process_resolution(self, ds, mo_basin):
         """Process resolution analysis"""
+        logger.info("Processing resolution layer.")
         ds_clipped = ds.rio.clip(mo_basin.geometry, "EPSG:4326")
         
         # Print the dimensions of the dataset for debugging
@@ -211,11 +219,12 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         w = ds_clipped.rio.width * factor
         ds_5km = ds_clipped.rio.reproject(ds_clipped.rio.crs, shape=(int(h), int(w)), resampling=Resampling.bilinear)
         ds_1km = ds_5km.rio.reproject_match(ds_clipped, 1)
-        
+        logger.info("Processing resolution layer completed successfully.")
         return ds_clipped, abs(ds_1km - ds_clipped)
 
     def compute_monthly_resolution(self, ds_abs, mo_basin):
         """Compute monthly resolution statistics"""
+        logger.info("Computing monthly resolution.")
         resolution_mo = ds_abs.convert_calendar(calendar='standard')
         temp = resolution_mo.groupby(resolution_mo.time.dt.month).mean()
         
@@ -225,8 +234,97 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         temp_resampled = (temp.sel(month=resolution_mo.time.dt.month)
                         .rio.write_crs("EPSG:4326")
                         .rio.clip(mo_basin.geometry, "EPSG:4326"))
+        logger.info("Computing monthly resolution successfully completed.")
         return temp_resampled
+    
+    def open_polygons(self, geojson_path):
+        geojson = gpd.read_file(geojson_path)
+        polygons = geojson.geometry
+        print('Polygons loaded.')
+        return polygons
 
+    def downsample_array(self, array, downsample_factor):
+        """
+        Downsamples the given array by the specified factor.
+
+        Args:
+            array (np.ndarray): The array to downsample.
+            downsample_factor (int): The factor by which to downsample the array.
+
+        Returns:
+            np.ndarray: The downsampled array.
+        """
+        return array[::downsample_factor, ::downsample_factor]
+
+    def get_extents(self, dataset, variable):
+        # Extract the GeoTransform attribute
+        geo_transform = dataset['spatial_ref'].GeoTransform.split()
+        # Convert GeoTransform values to float
+        geo_transform = [float(value) for value in geo_transform]
+        # Calculate the extents (four corners)
+        min_x = geo_transform[0]
+        pixel_width = geo_transform[1]
+        max_y = geo_transform[3]
+        pixel_height = geo_transform[5]
+        # Get the actual dimensions of the raster layer
+        n_rows, n_cols = dataset[variable][0, :, :].shape
+        # Calculate the coordinates of the four corners
+        top_left = (min_x, max_y)
+        top_right = (min_x + n_cols * pixel_width, max_y)
+        bottom_left = (min_x, max_y + n_rows * pixel_height)
+        bottom_right = (min_x + n_cols * pixel_width, max_y + n_rows * pixel_height)
+        return top_left, top_right, bottom_left, bottom_right
+    
+    def encode(self, dataset, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
+
+        logger.info('Encoding snow layer.')
+        polygons = self.open_polygons(geojson_path=geojson_path)
+        
+        raster_layer = dataset[variable]
+
+        raster_layer = raster_layer.rio.write_crs("EPSG:4326")
+        clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
+        print(clipped_layer)
+        if scale == 'time':
+            raster_layer = clipped_layer.sel(time=time_step)
+        elif scale == 'week':
+            raster_layer = clipped_layer.isel(week=time_step).values
+        elif scale == 'month':
+            raster_layer = clipped_layer.isel(month=time_step).values
+        
+        raster_layer = self.downsample_array(raster_layer, downsample_factor=downsample_factor)
+
+        raster_layer_min = np.nanmin(raster_layer)
+        raster_layer_max = np.nanmax(raster_layer)
+
+        na_mask = np.isnan(raster_layer)
+
+        if raster_layer_max > raster_layer_min:
+            normalized_layer = (raster_layer - raster_layer_min) / (raster_layer_max - raster_layer_min)
+        else:
+            normalized_layer = np.zeros_like(raster_layer)
+
+        colormap = plt.get_cmap('Blues_r')
+        rgba_image = colormap(normalized_layer)
+
+        rgba_image[..., 3] = np.where(na_mask, 0, 1)
+
+        rgba_image = (rgba_image * 255).astype(np.uint8)
+
+        image = Image.fromarray(rgba_image, 'RGBA')
+        image.save(output_path)
+
+        top_left, top_right, bottom_left, bottom_right = self.get_extents(dataset, variable=variable)
+
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+
+        raster_layer_encoded = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+        logger.info('Encoding snow layer successfully completed.')
+
+        return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
+    
     def publish_message(self):
 
         current_time = self.constellation.get_time()
@@ -276,9 +374,9 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         
         self.app.send_message(
             self.app.app_name,
-            "resolution_layer",
+            "layer",
             ResolutionLayer(
-                snow_layer=resolution_layer,
+                resolution_layer=resolution_layer,
                 top_left=top_left,
                 top_right=top_right,
                 bottom_left=bottom_left,
@@ -296,7 +394,7 @@ def main():
     VIRTUAL_HOST = credentials["VIRTUAL_HOST"]
     IS_TLS = credentials["IS_TLS"].lower() == 'true'
     PREFIX = "sos"
-    NAME = "layer"#"constellation"
+    NAME = "resolution"
 
     config = ConnectionConfig(
         USERNAME,
@@ -312,7 +410,7 @@ def main():
 
     app = ManagedApplication(NAME)
 
-    constellation = Constellation("layer") #"constellation")
+    constellation = Constellation("resolution")
     app.simulator.add_entity(constellation)
     app.simulator.add_observer(ShutDownObserver(app))
 

@@ -40,12 +40,6 @@ RUN apt-get install -y gdal-bin libgdal-dev proj-bin proj-data
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
-#install AWS command line interface (CLI)
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
-    && unzip awscliv2.zip \
-    && ./aws/install -i /usr/local/aws-cli -b /usr/local/bin \
-    && rm awscliv2.zip
-
 # Install Python dependencies
 RUN python3 -m pip install --upgrade pip
 RUN python3 -m pip install -r /opt/requirements.txt
@@ -54,6 +48,11 @@ RUN wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip 
     && cd nost-tools-main \
     && python3 -m pip install -e .
 
+#install AWS command line interface (CLI)
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && ./aws/install -i /usr/local/aws-cli -b /usr/local/bin \
+    && rm awscliv2.zip
 # ENTRYPOINT ["/usr/local/bin/aws"]
 
 # # Install Miniconda

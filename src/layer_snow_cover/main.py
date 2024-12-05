@@ -59,10 +59,6 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
         if self.time_status_init is None:
             self.time_status_init = self.constellation.ts.now().utc_datetime()
-            print(f'TIME STATUS INIT: {self.time_status_init}')
-        else:
-            self.time_status_init = self.time_status_init
-            print(f'TIME STATUS INIT: {self.time_status_init}')
     
     def efficiency(self, T, k, datarray):
         logger.info("Calculating efficiency.")
@@ -92,11 +88,46 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         logger.info("Downloading snow data successfully completed.")
         return earthaccess.download(results, path_hdf, threads=1)
 
+    # def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
+    #     """Process HDF files to NetCDF with dask parallelization"""
+    #     logger.info("Processing snow files.")
+    #     lon = np.linspace(-180, 180, 7200)
+    #     lat = np.flip(np.linspace(-90, 90, 3600))
+    #     files = []
+    #     time_sc = []
+
+    #     for filename in os.listdir(path_hdf):    
+    #         year = filename[9:13]
+    #         day = filename[13:16]
+    #         name = filename[0:34]
+
+    #         # converting day of year to time
+    #         dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
+    #         time_sc.append(dates)
+            
+    #         # Using context manager to ensure the file is closed
+    #         with xr.open_dataset(os.path.join(path_hdf, filename), engine='h5netcdf') as f_nc: #netcdf4
+    #             snow = f_nc['Day_CMG_Snow_Cover']
+    #             temp_arr = xr.DataArray(
+    #                 data=snow,
+    #                 dims=['lat', 'lon'],
+    #                 coords=dict(
+    #                     lon=lon,
+    #                     lat=lat,
+    #                 )
+    #             )
+    #             temp_arr.to_netcdf(os.path.join(path_nc, name + ".nc"))
+            
+    #         files = glob.glob(os.path.join(path_nc, "*.nc"))
+    #         logger.info("Processing snow files successfully completed.")
+                    
+    #     return files, time_sc
+
     def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
-        """Process HDF files to NetCDF with dask parallelization"""
         logger.info("Processing snow files.")
-        lon = np.linspace(-180, 180, 7200)
-        lat = np.flip(np.linspace(-90, 90, 3600))
+        ctr = 0
+        lon = np.linspace(-180,180,7200)
+        lat = np.flip(np.linspace(-90,90,3600))
         files = []
         time_sc = []
 
@@ -106,27 +137,25 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
             name = filename[0:34]
 
             # converting day of year to time
-            dates = pd.to_datetime(int(day)-1, unit='D', origin=year)     
-            time_sc.append(dates)
-            
-            # Using context manager to ensure the file is closed
-            with xr.open_dataset(os.path.join(path_hdf, filename), engine='netcdf4') as f_nc:
-                snow = f_nc['Day_CMG_Snow_Cover']
-                temp_arr = xr.DataArray(
-                    data=snow,
-                    dims=['lat', 'lon'],
-                    coords=dict(
-                        lon=lon,
-                        lat=lat,
-                    )
-                )
-                temp_arr.to_netcdf(os.path.join(path_nc, name + ".nc"))
-            
-            files = glob.glob(os.path.join(path_nc, "*.nc"))
-            logger.info("Processing snow files successfully completed.")
-                    
-        return files, time_sc
 
+            dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
+            time_sc.append(dates)
+            f_nc = xr.open_dataset(os.path.join(path_hdf, filename),engine = 'netcdf4')  
+            snow = f_nc['Day_CMG_Snow_Cover']
+            temp_arr = xr.DataArray(
+            data=snow,
+            dims=['lat','lon'],
+            coords=dict(
+                lon = lon,
+                lat = lat,
+            )
+            )
+            temp_arr.to_netcdf(path_nc + name + ".nc")
+        files = glob.glob(os.path.join(path_nc,"*.nc"))
+        files = [f for f in files if not f.endswith("snowcover-merged.nc")]
+        
+        return files, time_sc
+    
     def merge_netcdf_files(self, files: List[str], time_sc: List[datetime], path_nc: str) -> xr.Dataset:
         """Merge NetCDF files with dask"""
         logger.info("Merging NetCDF files.")
@@ -178,9 +207,10 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         return temp_resampled
         
     def open_polygons(self, geojson_path):
+        logger.info('Loading polygons.')
         geojson = gpd.read_file(geojson_path)
         polygons = geojson.geometry
-        print('Polygons loaded.')
+        logger.info('Loading polygons successfully completed.')
         return polygons
 
     def downsample_array(self, array, downsample_factor):
@@ -224,7 +254,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
         raster_layer = raster_layer.rio.write_crs("EPSG:4326")
         clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
-        print(clipped_layer)
+        
         if scale == 'time':
             raster_layer = clipped_layer.sel(time=time_step)
         elif scale == 'week':
@@ -295,10 +325,10 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         T = float(config_data['threshold'])
         k = -float(config_data['coefficient'])
         
-        logger.info(path_efficiency)
+        logger.info("Calculating effiency.")
         dataset = self.efficiency(T, k, temp_resampled)
         dataset.to_netcdf(os.path.join(path_efficiency, 'efficiency_snow_cover_up.nc'))
-        logger.info("Efficiency calculation successfully completed.")
+        logger.info("Calculating effiency successfully completed.")
 
         snow_layer, top_left, top_right, bottom_left, bottom_right = self.encode(
             dataset=dataset,
@@ -311,7 +341,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         
         self.app.send_message(
             self.app.app_name,
-            "snow_layer",
+            "layer",
             SnowLayer(
                 snow_layer=snow_layer,
                 top_left=top_left,
@@ -341,7 +371,7 @@ def main():
     VIRTUAL_HOST = credentials["VIRTUAL_HOST"]
     IS_TLS = credentials["IS_TLS"].lower() == 'true'
     PREFIX = "sos"
-    NAME = "layer"#"constellation"
+    NAME = "snow"
 
     config = ConnectionConfig(
         USERNAME,
@@ -357,7 +387,7 @@ def main():
 
     app = ManagedApplication(NAME)
 
-    constellation = Constellation("layer") #"constellation")
+    constellation = Constellation("snow")
     app.simulator.add_entity(constellation)
     app.simulator.add_observer(ShutDownObserver(app))
 
