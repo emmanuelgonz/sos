@@ -29,24 +29,14 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     zlib1g-dev \
     libcurl4-gnutls-dev \
-    libssl-dev
-
-# Add deadsnakes PPA and install Python 3.10
-RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-dev python3-pip
+    libssl-dev \
+    sqlite3
 
 # Install GDAL
 RUN add-apt-repository ppa:ubuntugis/ppa && apt-get update
 RUN apt-get install -y gdal-bin libgdal-dev proj-bin proj-data
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
-
-# Install Python dependencies
-RUN python3 -m pip install --upgrade pip
-RUN python3 -m pip install -r /opt/requirements.txt
-RUN wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
-    && unzip main.zip \
-    && cd nost-tools-main \
-    && python3 -m pip install -e .
 
 #install AWS command line interface (CLI)
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" \
@@ -55,24 +45,36 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     && rm awscliv2.zip
 # ENTRYPOINT ["/usr/local/bin/aws"]
 
-# # Install Miniconda
-# RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh \
-#     && bash /opt/miniconda.sh -b -p /opt/miniconda \
-#     && rm /opt/miniconda.sh
+# Install Miniconda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /opt/miniconda.sh \
+    && bash /opt/miniconda.sh -b -p /opt/miniconda \
+    && rm /opt/miniconda.sh
 
-# # Add Miniconda to PATH
-# ENV PATH=/opt/miniconda/bin:$PATH
+# Add Miniconda to PATH
+ENV PATH=/opt/miniconda/bin:$PATH
 
-# # Create and activate conda environment
-# RUN conda create --name sos python=${PYTHON_VERSION} -y \
-#     && conda clean -a -y
+# Create and activate conda environment
+RUN conda create --name sos python=${PYTHON_VERSION} -y \
+    && conda clean -a -y
 
-# # Activate the conda environment and install dependencies
-# RUN /bin/bash -c "source activate sos \
-#     && pip install -r /opt/requirements.txt \
-#     && conda install xarray netcdf4 -y \
-#     && conda install conda-forge::rioxarray -y \
-#     && wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
+# Activate the conda environment and install dependencies
+RUN /bin/bash -c "source activate sos \
+    && pip install -r /opt/requirements.txt \
+    && conda install xarray netcdf4 \
+    && conda install conda-forge::rioxarray \
+    && conda install conda-forge::gdal \
+    && wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
+    && unzip main.zip \
+    && cd nost-tools-main \
+    && pip install -e ."
+
+# # Add deadsnakes PPA and install Python 3.10
+# RUN add-apt-repository ppa:deadsnakes/ppa && apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-dev python3-pip
+
+# # Install Python dependencies
+# RUN python3 -m pip install --upgrade pip
+# RUN python3 -m pip install -r /opt/requirements.txt
+# RUN wget https://github.com/emmanuelgonz/nost-tools/archive/refs/heads/main.zip \
 #     && unzip main.zip \
 #     && cd nost-tools-main \
-#     && pip install -e ."
+#     && python3 -m pip install -e .
