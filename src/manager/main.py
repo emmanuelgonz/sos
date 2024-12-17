@@ -14,7 +14,8 @@ from manager_config_files.config import (
 
 logging.basicConfig(level=logging.INFO)
 
-if __name__ == "__main__":  
+if __name__ == "__main__":
+    SCALE = 1
     # Load credentials from a .env file in current working directory
     credentials = dotenv_values(".env")
     HOST, RABBITMQ_PORT, KEYCLOAK_PORT, KEYCLOAK_REALM = credentials["HOST"], int(credentials["RABBITMQ_PORT"]), int(credentials["KEYCLOAK_PORT"]), str(credentials["KEYCLOAK_REALM"])
@@ -59,5 +60,5 @@ if __name__ == "__main__":
         time_status_step=timedelta(seconds=1) * SCALE,         # optional duration between time status 'heartbeat' messages
         time_status_init=datetime(2024, 1, 7, tzinfo=timezone.utc),  # optional initial scenario datetime to start publishing time status 'heartbeat' messages
         command_lead=timedelta(seconds=5),                     # lead time before a scheduled update or stop command
-        required_apps=['snow'], # , 'resolution', 'constellation' list of required applications 
+        required_apps=["snodas"] #, "response"] #['snow', 'resolution', 'constellation'], # list of required applications 
     )

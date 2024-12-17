@@ -193,6 +193,7 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
 
         logger.info("Processing snow layer.")
         snow_layer = rxr.open_rasterio(os.path.join(path_nc,"snowcover-merged.nc"),crs = "EPSG:4326")
+        # snow_layer = snow_layer.rio.write_crs("EPSG:4326")  # Ensure CRS is set
         snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
         snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
         temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
