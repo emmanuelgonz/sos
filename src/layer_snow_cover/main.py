@@ -258,10 +258,10 @@ class LayerPublisher(WallclockTimeIntervalPublisher):
         
         if scale == 'time':
             raster_layer = clipped_layer.sel(time=time_step)
-        elif scale == 'week':
-            raster_layer = clipped_layer.isel(week=time_step).values
-        elif scale == 'month':
-            raster_layer = clipped_layer.isel(month=time_step).values
+        # elif scale == 'week':
+        #     raster_layer = clipped_layer.isel(week=time_step).values
+        # elif scale == 'month':
+        #     raster_layer = clipped_layer.isel(month=time_step).values
         
         raster_layer = self.downsample_array(raster_layer, downsample_factor=downsample_factor)
 
