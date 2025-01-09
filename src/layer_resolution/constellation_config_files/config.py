@@ -2,7 +2,7 @@ import os
 from skyfield.api import load
 
 PREFIX = os.getenv("PREFIX", "sos")
-NAME = "constellation"
+NAME = "resolution"
 LOG = f"\x1b[1m[\x1b[34m{NAME}\x1b[37m]\x1b[0m"
 HEADER = {
     "name": NAME,
@@ -27,4 +27,4 @@ FIELD_OF_REGARD = [float(os.getenv("FIELD_OF_REGARD", 110)),
 # )  # degrees (comms more forgiving than sensor, not currently used)
 # MIN_INTENSITY = float(os.getenv("MIN_INTENSITY", 10.0))  # square meters
 
-SCALE = 1 #20160 #120 #60
+SCALE = 3600 #17280 #20160 #120 #60

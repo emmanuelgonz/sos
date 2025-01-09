@@ -224,3 +224,24 @@ class CapellaLayer(BaseModel):
     bottom_right: list[float] = Field(
         ..., description="Bottom right corner of satellite"
     )
+
+class SWEChangeLayer(BaseModel):
+    """
+    
+    """
+    swe_change_layer: str = Field(
+        ..., description="SWE Change layer of satellite"
+    )
+    top_left: list[float] = Field(
+        ..., description="Top left corner of satellite"
+    )
+    top_right: list[float] = Field(
+        ..., description="Top right corner of satellite"
+    )
+    bottom_left: list[float] = Field(
+        ..., description="Bottom left corner of satellite"
+    )
+    bottom_right: list[float] = Field(
+        ..., description="Bottom right corner of satellite"
+    )
+    

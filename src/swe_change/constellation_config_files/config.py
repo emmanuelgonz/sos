@@ -2,7 +2,7 @@ import os
 from skyfield.api import load
 
 PREFIX = os.getenv("PREFIX", "sos")
-NAME = "snow"
+NAME = "swe_change"
 LOG = f"\x1b[1m[\x1b[34m{NAME}\x1b[37m]\x1b[0m"
 HEADER = {
     "name": NAME,

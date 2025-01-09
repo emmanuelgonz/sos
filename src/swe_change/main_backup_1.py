@@ -12,6 +12,7 @@ from shapely import Polygon
 import xarray as xr
 import numpy as np
 import rioxarray
+import pandas as pd
 
 # NOS-T
 from nost_tools.application_utils import ConnectionConfig, ShutDownObserver
@@ -22,6 +23,7 @@ from nost_tools.publisher import WallclockTimeIntervalPublisher
 from nost_tools.simulator import Simulator, Mode
 
 from constellation_config_files.schemas import SNODASStatus
+from constellation_config_files.config import PREFIX, NAME, SCALE
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -39,36 +41,82 @@ class Environment(Observer):
         self.app = app
         # self.grounds = grounds
 
-    def categorize_dates(self, start_date, end_date):
-        # Initialize dictionaries to hold weeks and months
-        weeks = {}
-        months = {}
+    # def categorize_dates(self, start_date, end_date):
+    #     # Initialize dictionaries to hold weeks and months
+    #     weeks = {}
+    #     months = {}
 
-        # Convert start and end dates to datetime objects
-        start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        end_date = datetime.strptime(end_date, "%Y-%m-%d")
+    #     # Convert start and end dates to datetime objects
+    #     start_date = datetime.strptime(start_date, "%Y-%m-%d")
+    #     end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-        # Iterate through each date in the range
-        current_date = start_date
-        while current_date <= end_date:
-            # Get the week number and month name
-            week_number = current_date.strftime("%Y-W%U")
-            month_name = current_date.strftime("%Y-%m")
+    #     # Iterate through each date in the range
+    #     current_date = start_date
+    #     while current_date <= end_date:
+    #         # Get the week number and month name
+    #         week_number = current_date.strftime("%Y-W%U")
+    #         month_name = current_date.strftime("%Y-%m")
 
-            # Add the date to the respective week and month
-            if week_number not in weeks:
-                weeks[week_number] = []
-            if month_name not in months:
-                months[month_name] = []
+    #         # Add the date to the respective week and month
+    #         if week_number not in weeks:
+    #             weeks[week_number] = []
+    #         if month_name not in months:
+    #             months[month_name] = []
 
-            weeks[week_number].append(current_date.strftime("%Y-%m-%d"))
-            months[month_name].append(current_date.strftime("%Y-%m-%d"))
+    #         weeks[week_number].append(current_date.strftime("%Y-%m-%d"))
+    #         months[month_name].append(current_date.strftime("%Y-%m-%d"))
 
-            # Move to the next date
-            current_date += timedelta(days=1)
+    #         # Move to the next date
+    #         current_date += timedelta(days=1)
 
-        return weeks, months
+    #     return weeks, months
+    def get_week_number(self, start_date, end_date):
+        """
+        Get the week numbers for each date in the date range
+        
+        Args:
+            start_date (datetime): The start date of the date range
+            end_date (datetime): The end date of the date range
+        
+        Returns:
+            week_dict (dict): A dictionary of the date strings and the week numbers
+        """
+        # Create a date range from the start and end dates
+        dates = pd.date_range(start_date, end_date, freq='D')
+        # Create a dictionary of the date strings and the week numbers
+        week_dict = {date.strftime('%Y-%m-%d'): date.isocalendar()[1] for date in dates}
+        return week_dict
 
+    def get_month_number(self, start_date, end_date):
+        """
+        Get the month numbers for each date in the date range
+
+        Args:
+            start_date (datetime): The start date of the date range
+            end_date (datetime): The end date of the date range
+        
+        Returns:
+            month_dict (dict): A dictionary of the date strings and the month numbers
+        """
+        # Create a date range from the start and end dates
+        dates = pd.date_range(start_date, end_date, freq='D')
+        # Create a dictionary of the date strings and the month numbers
+        month_dict = {date.strftime('%Y-%m-%d'): date.month for date in dates}
+        return month_dict
+    
+    def detect_level_change(self, new_value, old_value, level):
+        # new_value = parse_datetime(new_value_str)
+        # old_value = parse_datetime(old_value_str)
+        
+        if level == 'day':
+            return new_value.date() != old_value.date()
+        elif level == 'week':
+            return new_value.isocalendar()[1] != old_value.isocalendar()[1]
+        elif level == 'month':
+            return new_value.month != old_value.month
+        else:
+            raise ValueError("Invalid level. Choose from 'day', 'week', or 'month'.")
+     
     def on_change(self, source, property_name, old_value, new_value):
         """
         *Standard on_change callback function format inherited from Observer object class*
@@ -76,32 +124,39 @@ class Environment(Observer):
             .. literalinclude:: /../../NWISdemo/grounds/main_ground.py
                 :lines: 56-67
         """
-        # logger.info(f'>>>SOURCE: {source.get_time_scale_factor()}')
-        # logger.info(f'>>>PROPERTY NAME: {property_name}')
         if property_name == 'time':
-            # logger.info(f'>>>SOURCE: {source}')
+            # Log the source, property name, old value, and new value
+            # logger.info(f'>>>SOURCE: {source._time_scale_factor}')
             # logger.info(f'>>>PROPERTY NAME: {property_name}')
             # logger.info(f'>>>OLD VALUE: {old_value}')
             # logger.info(f'>>>NEW VALUE: {new_value}')
-            # logger.info(f'>>>START TIME: {source._init_time}')
-            # logger.info(f'>>>END TIME: {source.get_end_time()}')
-            weeks, months = self.categorize_dates(str(source._init_time.date()), str(source.get_end_time().date()))
-            logger.info(f'>>>WEEKS: {weeks}')
-            logger.info(f'>>>MONTHS: {months}')
-        # if property_name == Simulator.PROPERTY_MODE and new_value == Mode.EXECUTING:
-        #     logger.info(f'ON CHANGE::::: {property_name}, {new_value}, {old_value}')
-            # for index, ground in self.grounds.iterrows():
-            #     self.app.send_message(
-            #         self.app.app_name,
-            #         "location",
-            #         GroundLocation(
-            #             groundId=ground.groundId,
-            #             latitude=ground.latitude,
-            #             longitude=ground.longitude,
-            #             elevAngle=ground.elevAngle,
-            #             operational=ground.operational,
-            #         ).json(),
-            #     )
+            # logger.info(f'>>>TIME: {source._time}')
+
+            # Get the start and end dates from the source
+            start_date = source._init_time.date()
+            end_date = source.get_end_time().date()
+
+            # # Get the week and month numbers for the date range
+            # weeks = self.get_week_number(start_date, end_date)
+            months = self.get_month_number(start_date, end_date)
+            
+            # # Get the week and month numbers for the new value
+            # week_number = weeks.get(new_value.date().strftime('%Y-%m-%d'))
+            month_number = months.get(new_value.date().strftime('%Y-%m-%d'))
+            
+            # logger.info(f'>>>WEEK NUMBER: {week_number}')
+            logger.info(f'>>>MONTH NUMBER: {month_number}')
+
+            # Determine if day has changed
+            change = self.detect_level_change(new_value, old_value, 'month')
+
+            if change:
+                # Log a change
+                logger.info(f'>>>CHANGE: {change}')
+
+            # # Log the weeks and months
+            # logger.info(f'>>>WEEKS: {weeks}')
+            # logger.info(f'>>>MONTHS: {months}')
 
 def load_config() -> Tuple[str, ...]:
     """
@@ -292,9 +347,9 @@ def main():
     CLIENT_SECRET_KEY = credentials["CLIENT_SECRET_KEY"]
     VIRTUAL_HOST = credentials["VIRTUAL_HOST"]
     IS_TLS = credentials["IS_TLS"].lower() == 'true'  # Convert to boolean
-    PREFIX = "sos"
-    NAME = "response"
-    SCALE = 1
+    # PREFIX = "sos"
+    # NAME = "response"
+    # SCALE = 1
 
     # Set the client credentials from the config file
     config = ConnectionConfig(

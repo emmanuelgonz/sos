@@ -10,7 +10,10 @@ from osgeo import gdal
 import pandas as pd
 from dotenv import dotenv_values, load_dotenv
 import rioxarray as rxr
+import earthaccess
 import xarray as xr
+import numpy as np
+import glob
 from typing import List, Tuple
 from nost_tools.simulator import Simulator, Mode
 from constellation_config_files.schemas import SNODASStatus
@@ -29,28 +32,7 @@ from nost_tools.publisher import WallclockTimeIntervalPublisher
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
-
-
-
-# def main():
-#     dates = pd.date_range(datetime(2024, 1, 7), datetime(2024, 1, 21))
-
-#     # Get the minimum and maximum dates
-#     min_date = dates.min()
-#     max_date = dates.max()
-    
-#     print(min_date, max_date)
-#     snodas_dir = "SNODAS"
-#     ensure_directory_exists(snodas_dir)
-#     process_dates(dates, snodas_dir)
-#     output_path = os.path.join('./data', "snodas-merged.nc")
-#     print("Writing snodas-merged.nc")
-#     merge_netcdf_files(dates, snodas_dir, output_path)
-
-# if __name__ == "__main__":
-#     main()
-
-# define an observer to manage ground updates
+# define an observer to manage data updates
 class Environment(Observer):
     """
     *The Environment object class inherits properties from the Observer object class in the NOS-T tools library*
@@ -75,7 +57,7 @@ class Environment(Observer):
             os.getenv('path_efficiency'),
             os.getenv('path_snodas')
         )
-
+    
     def ensure_directory_exists(self, directory):
         """
         Ensure that the specified directory exists. If it does not, create it.
@@ -86,113 +68,89 @@ class Environment(Observer):
         if not os.path.exists(directory):
             logger.info(f'Creating {directory} directory')
             os.makedirs(directory)
-
-    def download_and_extract_tar(self, date, tmp_dir, dir_label):
-        """
-        Download and extract a tar file from the NSIDC FTP server.
-
+    
+    def download_snow_data(self, path_hdf: str, start_date: str, end_date: str) -> List[str]:
+        """Download snow cover data using EarthAccess
+        
         Args:
-            date (datetime): The date of the tar file to download
-            tmp_dir (str): The temporary directory to download the tar file to
-            dir_label (str): The label of the directory to download
+            path_hdf (str): The path to save the downloaded HDF files
+            start_date (str): The start date to download data
+            end_date (str): The end date to download data
+        
+        Returns:
+            List[str]: A list of downloaded files
         """
-        url = (
-            "https://noaadata.apps.nsidc.org/NOAA/G02158/masked/" + 
-            f"{date.strftime('%Y')}/{date.strftime('%m')}_{date.strftime('%b')}/" +
-            dir_label + ".tar"
+        logger.info("Downloading snow data.")
+        earthaccess.login(strategy="environment")
+        results = earthaccess.search_data(
+            short_name='MOD10C1',
+            temporal=(start_date, end_date)
         )
-        r = requests.get(url)
-        tar_path = os.path.join(tmp_dir, dir_label + ".tar")
-        with open(tar_path, "wb") as tar_file:
-            tar_file.write(r.content)
-        with tarfile.open(tar_path, "r") as tar_file:
-            tar_file.extractall(tmp_dir)
-
-    def process_swe_file(self, tmp_dir, snodas_dir, file_label, date):
+        logger.info("Downloading snow data successfully completed.")
+        return earthaccess.download(results, path_hdf, threads=1)
+    
+    def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
         """
-        Process a SWE file from the NSIDC FTP server.
+        Process snow files to NetCDF format.
 
         Args:
-            tmp_dir (str): The temporary directory to download the tar file to
-            snodas_dir (str): The directory to save the processed SWE file to
-            file_label (str): The label of the file to process
-            date (datetime): The date of the file to process
+            path_hdf (str): The path to HDF files
+            path_nc (str): The path to save NetCDF files
+        
+        Returns:
+            Tuple[List[str], List[datetime]]: A tuple of list of files and list of datetime
         """
-        gz_path = os.path.join(tmp_dir, file_label + ".dat.gz")
-        dat_path = os.path.join(tmp_dir, file_label + ".dat")
-        with gzip.open(gz_path, "rb") as gz_in:
-            with open(dat_path, "wb") as gz_out:
-                shutil.copyfileobj(gz_in, gz_out)
-        hdr_path = os.path.join(tmp_dir, file_label + ".hdr")
-        with open(hdr_path, "w") as hdr_file:
-            hdr_file.write(
-                "ENVI\n"
-                "samples = 6935\n"
-                "lines = 3351\n"
-                "bands = 1\n"
-                "header offset = 0\n"
-                "file type = ENVI Standard\n"
-                "data type = 2\n"
-                "interleave = bsq\n"
-                "byte order = 1"
+        logger.info("Processing snow files.")
+        ctr = 0
+        lon = np.linspace(-180,180,7200)
+        lat = np.flip(np.linspace(-90,90,3600))
+        files = []
+        time_sc = []
+
+        for filename in os.listdir(path_hdf):    
+            year = filename[9:13]
+            day = filename[13:16]
+            name = filename[0:34]
+
+            dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
+            time_sc.append(dates)
+            f_nc = xr.open_dataset(os.path.join(path_hdf, filename),engine = 'netcdf4')  
+            snow = f_nc['Day_CMG_Snow_Cover']
+            temp_arr = xr.DataArray(
+            data=snow,
+            dims=['lat','lon'],
+            coords=dict(
+                lon = lon,
+                lat = lat,
             )
-        command = " ".join([
-            "gdal_translate",
-            "-of NetCDF",
-            "-a_srs EPSG:4326",
-            "-a_nodata -9999",
-            "-a_ullr -124.73375000000000 52.87458333333333 -66.94208333333333 24.94958333333333" 
-            if date < datetime(2013, 10, 1)
-            else "-a_ullr -124.73333333333333 52.87500000000000 -66.94166666666667 24.95000000000000",
-            dat_path,
-            os.path.join(snodas_dir, file_label + ".nc")
-        ])
-        if os.system(command) > 0:
-            print(f"Error processing command `{command}`")
-
-    def process_dates(self, dates, snodas_dir):
-        """
-        Process a list of dates from the NSIDC FTP server.
+            )
+            temp_arr.to_netcdf(path_nc + name + ".nc")
+        files = glob.glob(os.path.join(path_nc,"*.nc"))
+        files = [f for f in files if not f.endswith("snowcover-merged.nc")]
         
-        Args:
-            dates (List[datetime]): A list of dates to process
-            snodas_dir (str): The directory to save the processed SWE files to
+        return files, time_sc
+    
+    def merge_netcdf_files(self, files: List[str], time_sc: List[datetime], output_path: str) -> xr.Dataset:
         """
-        for date in dates:
-            file_label = f"us_ssmv11034tS__T0001TTNATS{date.strftime('%Y')}{date.strftime('%m')}{date.strftime('%d')}05HP001"
-            print(file_label)
-            if os.path.isfile(os.path.join(snodas_dir, file_label + ".nc")):
-                print("Skipping " + file_label)
-                continue
-            print("Processing " + file_label)
-            dir_label = f"SNODAS_{date.strftime('%Y%m%d')}"
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                self.download_and_extract_tar(date, tmp_dir, dir_label)
-                for filename in os.listdir(tmp_dir):
-                    if os.path.isfile(os.path.join(tmp_dir, filename)) and filename == file_label + ".dat.gz":
-                        self.process_swe_file(tmp_dir, snodas_dir, file_label, date)
+        Merge NetCDF files.
 
-    def merge_netcdf_files(self, dates, snodas_dir, output_path):
-        """
-        Merge a list of NetCDF files.
-        
         Args:
-            dates (List[datetime]): A list of dates to merge
-            snodas_dir (str): The directory containing the NetCDF files to merge
+            files (List[str]): A list of files
+            time_sc (List[datetime]): A list of datetime
             output_path (str): The path to save the merged NetCDF file
         """
+        logger.info("Merging NetCDF files.")
         ds = xr.combine_by_coords(
-            [
-                rxr.open_rasterio(
-                    os.path.join(
-                        snodas_dir, 
-                        f"us_ssmv11034tS__T0001TTNATS{date.strftime('%Y')}{date.strftime('%m')}{date.strftime('%d')}05HP001.nc"
-                    )
-                ).drop_vars("band").assign_coords(time=date).expand_dims(dim="time")
-                for date in dates
+            [        
+                rxr.open_rasterio(files[i]).drop_vars("band").assign_coords(time=time_sc[i]).expand_dims(dim="time")         
+                for i in range(len(time_sc))            
             ], 
             combine_attrs="drop_conflicts"
-        ).to_netcdf(output_path)
+        )
+        ds = ds.rio.write_crs("EPSG:4326")
+        ds.to_netcdf(output_path)
+        logger.info(f"Merging NetCDF files successfully completed.")
+
 
     def on_change(self, source, property_name, old_value, new_value):
         """
@@ -211,20 +169,22 @@ class Environment(Observer):
             start_time = self.app._sim_start_time.date()
             stop_time = self.app._sim_stop_time.date()
             dates = pd.date_range(start_time, stop_time)
+            logger.info(f"Processing MOD10C1 data from {start_time} to {stop_time}")
 
-            # Ensure download directory exists
-            self.ensure_directory_exists(self.path_snodas)
+            # Ensure download directory exists & download MOD10C1 data
+            self.ensure_directory_exists(self.path_hdf)
+            self.download_snow_data(self.path_hdf, start_time, stop_time)
             
-            # Process SNODAS data
-            logger.info("Processing SNODAS data.")
-            self.process_dates(dates, self.path_snodas)
-            logger.info("Processing SNODAS data successfully completed.")
+            # Process MOD10C1 data
+            logger.info("Processing MOD10C1 data.")
+            files, time_sc = self.process_snow_files(self.path_hdf, self.path_nc)
+            logger.info("Processing MOD10C1 data successfully completed.")
 
-            # Merge SNODAS data
-            logger.info("Merging SNODAS data.")
-            output_path = os.path.join(self.path_snodas, "snodas-merged.nc")
-            self.merge_netcdf_files(dates, self.path_snodas, output_path)
-            logger.info("Merging SNODAS data successfully completed.")
+            # Merge MOD10C1 data
+            logger.info("Merging MOD10C1 data.")
+            output_path = os.path.join(self.path_nc, "snowcover-merged.nc")
+            self.merge_netcdf_files(files, time_sc, output_path)
+            logger.info("Merging MOD10C1 data successfully completed.")
 
             # Send DataStatus message
             self.app.send_message(
@@ -239,7 +199,7 @@ class Environment(Observer):
             )
 
             logger.info(f"SNODASStatus message sent.")
-   
+
 def main():
     # Load credentials from a .env file in current working directory
     credentials = dotenv_values(".env")

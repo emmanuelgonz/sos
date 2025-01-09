@@ -1,34 +1,37 @@
+# FROM: https://github.com/code-lab-org/sos/blob/H-Update/src/layer_swe_change/main.py
+
+# General
 import os
 import sys
+import logging
 from typing import List, Tuple
-import pandas as pd
-import numpy as np
-import xarray as xr
-import rioxarray as rxr
-import earthaccess
+from datetime import timedelta, datetime, timezone
+from dotenv import load_dotenv, dotenv_values
+
+# Geospatial & Data Processing
 import geopandas as gpd
-from shapely.geometry import Polygon
-from datetime import datetime, timedelta, timezone
-import dask as dask
-from configparser import ConfigParser
-from dotenv import load_dotenv
-from dotenv import dotenv_values
+from shapely import Polygon
+import xarray as xr
+import numpy as np
+import rioxarray
+import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 import io
 import base64
-from skyfield.api import load, wgs84, EarthSatellite
-import logging
-import glob
+
+# NOS-T
 from nost_tools.application_utils import ConnectionConfig, ShutDownObserver
 from nost_tools.entity import Entity
 from nost_tools.observer import Observer
 from nost_tools.managed_application import ManagedApplication
 from nost_tools.publisher import WallclockTimeIntervalPublisher
+from nost_tools.simulator import Simulator, Mode
 from constellation_config_files.schemas import SNODASStatus
-from constellation_config_files.schemas import SatelliteStatus, SnowLayer, ResolutionLayer, GcomLayer, CapellaLayer
-from constellation_config_files.config import PREFIX, NAME, SCALE, TLES, FIELD_OF_REGARD
+from constellation_config_files.schemas import SatelliteStatus, SnowLayer, ResolutionLayer, GcomLayer, CapellaLayer, SWEChangeLayer
+from constellation_config_files.config import PREFIX, NAME, SCALE
 
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 
@@ -47,20 +50,7 @@ class Environment(Observer):
         self.filepath = None
         self.initial_layer = True
         self.path_hdf, self.path_nc, self.path_shp, self.path_preprocessed, self.path_efficiency, self.path_snodas = self.load_config()
-
-    #--------------------------------------------------
-    def efficiency(self, T, k, datarray):
-        logger.info("Calculating efficiency.")
-        resolution_eta = 1 / (1 + np.exp(k * (datarray - T)))
-        logger.info("Calculating efficiency successfully completed.")
-        return resolution_eta
-    
-    def load_parameters(self):
-        config = ConfigParser()
-        config.read("Input_parameters.ini")
-        config_data = config['Resolution']
-        return float(config_data['threshold']), float(config_data['coefficient'])
-    
+        
     def load_config(self) -> Tuple[str, ...]:
         """
         Load environment variables and return paths
@@ -82,82 +72,6 @@ class Environment(Observer):
             os.getenv('path_snodas')
         )
 
-    def download_snow_data(self, path_hdf: str, start_date: str, end_date: str) -> List[str]:
-        """Download snow cover data using earthaccess"""
-        logger.info("Downloading snow data.")
-        earthaccess.login(strategy="environment")
-        results = earthaccess.search_data(
-            short_name='MOD10C1',
-            temporal=(start_date, end_date)
-        )
-        logger.info("Downloading snow data successfully completed.")
-        return earthaccess.download(results, path_hdf, threads=1)
-
-    def process_snow_files(self, path_hdf: str, path_nc: str) -> Tuple[List[str], List[datetime]]:
-        logger.info("Processing snow files.")
-        ctr = 0
-        lon = np.linspace(-180,180,7200)
-        lat = np.flip(np.linspace(-90,90,3600))
-        files = []
-        time_sc = []
-
-        for filename in os.listdir(path_hdf):    
-            year = filename[9:13]
-            day = filename[13:16]
-            name = filename[0:34]
-
-            # converting day of year to time
-
-            dates = pd.to_datetime(int(day)-1,unit = 'D', origin=year)     
-            time_sc.append(dates)
-            f_nc = xr.open_dataset(os.path.join(path_hdf, filename),engine = 'netcdf4')  
-            snow = f_nc['Day_CMG_Snow_Cover']
-            temp_arr = xr.DataArray(
-            data=snow,
-            dims=['lat','lon'],
-            coords=dict(
-                lon = lon,
-                lat = lat,
-            )
-            )
-            temp_arr.to_netcdf(path_nc + name + ".nc")
-        files = glob.glob(os.path.join(path_nc,"*.nc"))
-        files = [f for f in files if not f.endswith("snowcover-merged.nc")]
-        
-        return files, time_sc
-    
-    def merge_netcdf_files(self, files: List[str], time_sc: List[datetime], path_nc: str) -> xr.Dataset:
-        """Merge NetCDF files with dask"""
-        logger.info("Merging NetCDF files.")
-        output_file = os.path.join(path_nc, "snowcover-merged.nc")
-
-        if not os.path.isfile(output_file):
-            logger.info(f"Output file {output_file} does not exist. Merging NetCDF files.")
-            ds = xr.combine_by_coords(
-                [        
-                    rxr.open_rasterio(files[i]).drop_vars("band").assign_coords(time=time_sc[i]).expand_dims(dim="time")         
-                    for i in range(len(time_sc))            
-                ], 
-                combine_attrs="drop_conflicts"
-            )
-            ds = ds.rio.write_crs("EPSG:4326")
-            ds.to_netcdf(output_file)
-            logger.info(f"Merging NetCDF files successfully completed.")
-        else:
-            logger.info(f"Output file {output_file} already exists. Skipping merging.")
-        #     ds = xr.open_dataset(output_file)
-    
-        # return ds
-    
-    # def get_missouri_basin(self, path_shp: str) -> gpd.GeoSeries:
-    #     """Get Missouri Basin geometry"""
-        
-    #     logger.info("Downloading Missouri Basin geometry.")
-    #     us_map = gpd.read_file("https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_20m.zip")
-    #     mo_basin = gpd.read_file(os.path.join(path_shp, "WBD_10_HU2_Shape/Shape/WBDHU2.shp"))
-    #     logger.info("Downloading Missouri Basin geometry successfully completed.")
-
-    #     return gpd.GeoSeries(Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326")
     def get_missouri_basin(self, file_path: str) -> gpd.GeoSeries:
         """
         Get Missouri Basin geometry
@@ -172,77 +86,140 @@ class Environment(Observer):
         mo_basin = gpd.read_file(file_path)
         return gpd.GeoSeries(Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326")
 
-    def compute_weekly_snow_cover(self, snow_layer, mo_basin): #-> xr.Dataset:
+    def calculate_beta5(self, swe_change, threshold=10, k_value=0.2):
         """
-        Compute weekly snow cover
+        Calculate beta5 values based on the logistic function
         
         Args:
-            snow_layer (xr.Dataset): Snow cover dataset
+            swe_change (xr.DataArray): Absolute SWE change values
+            threshold (float): Threshold value for the logistic function
+            k_value (float): Scaling factor for the logistic function
         
         Returns:
-            xr.Dataset: Weekly snow cover dataset
+            xr.DataArray: Beta5 values based on the logistic function    
         """
-        logger.info("Computing weekly snow cover.")
-        # Clip the snow layer to the Missouri Basin 
-        snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
+        return 1 / (1 + np.exp(-k_value * (swe_change - threshold)))
 
-        # Convert the time coordinate to a standard calendar
-        snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
+    def process_snodas_data_to_swe_change(self) -> xr.Dataset:
+        """
+        Process SNODAS data and return a dataset with beta5 values and SWE differences
         
-        # Compute the mean of the snow cover for each week
-        temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
-        temp = temp.to_dataset()
-
-        # Rename the variable
-        temp = temp.rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
-
-        # Resample the data
-        temp_resampled = (temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
-                          .rio.write_crs("EPSG:4326")
-                          .rio.clip(mo_basin.geometry, "EPSG:4326"))
-        logger.info("Computing weekly snow cover successfully completed.")
-        return temp_resampled
-
-    def process_snow_layer(self) -> xr.Dataset:
-
-        logger.info("Processing MOD10C1 data.")
-
-        # Load Missouri Basin shapefile
-        mo_basin = self.get_missouri_basin(file_path=os.path.join(self.path_shp, "WBD_10_HU2_Shape/Shape/WBDHU2.shp"))
-
-        # Open the dataset
-        # file_path = os.path.join(self.message.file_path)
-        snow_layer = rxr.open_rasterio(self.message.file_path,crs = "EPSG:4326")
+        Args:
+            path_snodas (str): Path to the SNODAS dataset
+            path_shp (str): Path to the shapefile
         
-        # # snow_layer = snow_layer.rio.write_crs("EPSG:4326")  # Ensure CRS is set
-        # snow_layer_mo = snow_layer.rio.clip(mo_basin.envelope)
-        # snow_layer_mo = snow_layer_mo.convert_calendar(calendar='standard')
-        # temp = snow_layer_mo.groupby(snow_layer_mo.time.dt.isocalendar().week).max()
-        # temp = temp.to_dataset()
-        # temp = temp.rename({'Day_CMG_Snow_Cover': 'Weekly_Snow_Cover'})
-        # temp_resampled = temp.sel(week=snow_layer_mo.time.dt.isocalendar().week)
-        # temp_resampled = temp_resampled.rio.write_crs("EPSG:4326")
-        # temp_resampled = temp_resampled.rio.clip(mo_basin.geometry, "EPSG:4326")
-        temp_resampled = self.compute_weekly_snow_cover(snow_layer, mo_basin)
+        Returns:
+            xr.Dataset: Dataset containing beta5 values and SWE differences
+        """
+        logger.info("Processing SNODAS data.")
+        # Load the shapefile
+        mo_basin = self.get_missouri_basin(file_path=os.path.join(self.path_shp, "WBD_10_HU2.shp"))
 
-        
-        
-        # Load parameters
-        threshold, coefficient = self.load_parameters()
+        # Load the SNODAS dataset
+        file_path = os.path.join(self.message.file_path)
+        ds = xr.open_dataset(file_path)
 
-        dataset = self.efficiency(threshold, coefficient, temp_resampled)
-        
-        logger.info("Processing snow layer completed successfully.")
+        # Check if the dataset has a coordinate reference system (CRS) and set it to EPSG:4326 if not
+        if not ds.rio.crs:
+            ds = ds.rio.write_crs("EPSG:4326")
 
-        return dataset, temp_resampled
+        # Clip dataset to Missouri River Basin
+        masked_ds = ds.rio.clip(mo_basin.geometry, mo_basin.crs)
+
+        # Compute SWE values from the clipped dataset
+        swe = masked_ds['Band1']
+
+        # Squeeze any dimensions of size 1, especially for 'band'
+        if 'band' in swe.dims and swe.sizes['band'] == 1:
+            swe = swe.squeeze('band')
+
+        # Check the range of SWE values to verify non-zero values
+        # print("SWE min:", swe.min().values, "SWE max:", swe.max().values)
+
+        # Mask NaN and zero values before applying the difference calculation
+        swe_masked = swe.where(~np.isnan(swe))
+
+        # Calculate the SWE difference between consecutive time steps, keeping NaN values intact
+        swe_diff_abs = swe_masked.diff(dim='time').where(~np.isnan(swe_masked.diff(dim='time')))
+
+        # Set NaN values for zero differences or areas with no changes
+        swe_diff_abs = abs(swe_diff_abs).where(swe_diff_abs != 0, np.nan)
+
+        # Add a zero difference for the first time step to match the length
+        swe_diff_abs = xr.concat([xr.zeros_like(swe.isel(time=0)), swe_diff_abs], dim='time')
+
+        # Apply the beta5 calculation to SWE changes, keeping NaN values
+        beta5_values = self.calculate_beta5(swe_diff_abs)
+
+        # Replace NaN values with 1 in beta5
+        beta5_values = beta5_values.fillna(1)
+
+        # Create the DataArray for beta5 values
+        beta5_da = xr.DataArray(
+            beta5_values,
+            coords={
+                'time': swe['time'],
+                'y': swe['y'],
+                'x': swe['x']
+            },
+            dims=swe_diff_abs.dims,
+            name='beta5'
+        )
+
+        # Create a new dataset with beta5 values and the absolute SWE difference
+        new_ds = xr.Dataset({
+            'beta5': beta5_da,
+            'swe_diff_abs': swe_diff_abs
+        })
+
+        # Transpose the dataset to ensure 'time' is the first dimension
+        new_ds = new_ds.transpose('time', 'y', 'x')
+
+        # Remove 'grid_mapping' attribute if it exists in the dataset
+        for var in new_ds.variables:
+            if 'grid_mapping' in new_ds[var].attrs:
+                del new_ds[var].attrs['grid_mapping']
+
+        # Close the datasets
+        ds.close()
+        masked_ds.close()
+
+        logger.info("Processing SNODAS data successfully completed.")
+
+        return new_ds
+
+    def save_dataset(self, dataset: xr.Dataset):
+        """
+        Save the dataset to a NetCDF file
         
+        Args:
+            dataset (xr.Dataset): Dataset to save
+        
+        Returns:
+            None
+        """
+        # Save the dataset to a NetCDF file
+        logger.info("Saving dataset to NetCDF file.")
+        self.filepath = os.path.join(self.path_efficiency, 'Efficiency_SWE_Change_dataset.nc')
+        dataset.to_netcdf(self.filepath)
+        logger.info("Saving dataset to NetCDF file successfully completed.")
+        dataset.close()
+
     def open_polygons(self, geojson_path):
-        logger.info('Loading polygons.')
+        """
+        Open the polygons from the GeoJSON file.
+
+        Args:
+            geojson_path (str): The path to the GeoJSON file.
+        
+        Returns:
+            gpd.GeoSeries: The GeoSeries containing the polygons
+        """
         geojson = gpd.read_file(geojson_path)
         polygons = geojson.geometry
-        logger.info('Loading polygons successfully completed.')
+        print('Polygons loaded.')
         return polygons
-
+    
     def downsample_array(self, array, downsample_factor):
         """
         Downsamples the given array by the specified factor.
@@ -255,8 +232,18 @@ class Environment(Observer):
             np.ndarray: The downsampled array.
         """
         return array[::downsample_factor, ::downsample_factor]
-
+    
     def get_extents(self, dataset, variable):
+        """
+        Get the extents of the raster layer.
+
+        Args:
+            dataset (xr.Dataset): The dataset containing the raster layer.
+            variable (str): The variable name of the raster layer.
+        
+        Returns:
+            Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float], Tuple[float, float]]: The coordinates of the four corners of the raster layer.
+        """
         # Extract the GeoTransform attribute
         geo_transform = dataset['spatial_ref'].GeoTransform.split()
         # Convert GeoTransform values to float
@@ -274,19 +261,38 @@ class Environment(Observer):
         bottom_left = (min_x, max_y + n_rows * pixel_height)
         bottom_right = (min_x + n_cols * pixel_width, max_y + n_rows * pixel_height)
         return top_left, top_right, bottom_left, bottom_right
-
+    
     def encode(self, dataset, variable, output_path, time_step, scale, geojson_path, downsample_factor=1):
+        """
+        Encode the snow layer as a PNG image.
 
-        logger.info('Encoding snow layer.')
+        Args:
+            dataset (xr.Dataset): The dataset containing the raster layer.
+            variable (str): The variable name of the raster layer.
+            output_path (str): The path to save the encoded PNG image.
+            time_step (str): The time step to encode.
+            scale (str): The scale of the time step ('time', 'week', or 'month').
+            geojson_path (str): The path to the GeoJSON file.
+            downsample_factor (int): The factor by which to downsample the array.
+        
+        Returns:
+            str: The base64 encoded PNG image.
+        """
+        logger.info('Encoding layer.')
         polygons = self.open_polygons(geojson_path=geojson_path)
         
         raster_layer = dataset[variable]
 
         raster_layer = raster_layer.rio.write_crs("EPSG:4326")
         clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
-        
-        if scale == 'time':
+
+        try:
             raster_layer = clipped_layer.sel(time=time_step)
+        except KeyError:
+            try:
+                raster_layer = clipped_layer.isel(week=time_step)
+            except KeyError:
+                raster_layer = clipped_layer.isel(month=time_step)
         
         raster_layer = self.downsample_array(raster_layer, downsample_factor=downsample_factor)
 
@@ -308,6 +314,7 @@ class Environment(Observer):
         rgba_image = (rgba_image * 255).astype(np.uint8)
 
         image = Image.fromarray(rgba_image, 'RGBA')
+
         image.save(output_path)
 
         top_left, top_right, bottom_left, bottom_right = self.get_extents(dataset, variable=variable)
@@ -317,45 +324,9 @@ class Environment(Observer):
 
         raster_layer_encoded = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-        logger.info('Encoding snow layer successfully completed.')
+        logger.info('Encoding layer successfully completed.')
 
         return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
-    
-    # def on_data(self, ch, method, properties, body):
-    #     """
-    #     Callback function to check for new data. When callback function is triggered, the input data variable is set to True, which in turn triggers the on_change function.
-
-    #     Args:
-    #         ch: Channel
-    #         method: Method
-    #         properties: Properties
-    #         body: Body
-        
-    #     Returns:
-    #         None
-    #     """
-    #     # Decode the message body
-    #     self.message = SNODASStatus.parse_raw(body.decode('utf-8'))
-    #     logger.info(f'SNODAS message received: {self.message.publish_time.date()}')
-
-    #     # Process SNODAS data & save the new dataset to a NetCDF file
-    #     self.save_dataset(self.process_snodas_data_to_swe_change())
-
-    #     # Set the input data variable to True, which will trigger the on_change callback function
-    #     self.input_data_available = True
-    #     logger.info("New SNODAS data available. Input data variable set to 'True'.")
-
-    def save_dataset(self, dataset, out_path):
-        """
-        Save the dataset to a NetCDF file.
-
-        Args:
-            dataset (xr.Dataset): The dataset to save
-            out_path (str): The path to save the dataset
-        """
-        logger.info("Saving dataset to NetCDF file.")
-        dataset.to_netcdf(out_path)
-        logger.info("Saving dataset to NetCDF file successfully completed.")
     
     def open_dataset(self, path):
         """
@@ -406,18 +377,14 @@ class Environment(Observer):
         """
         # Decode the message body
         self.message = SNODASStatus.parse_raw(body.decode('utf-8'))
-        logger.info(f'MOD10C1 message received: {self.message.publish_time.date()}')
+        logger.info(f'SNODAS message received: {self.message.publish_time.date()}')
 
-        # Process MOD10C1 data
-        dataset, temp_resampled = self.process_snow_layer()
+        # Process SNODAS data & save the new dataset to a NetCDF file
+        self.save_dataset(self.process_snodas_data_to_swe_change())
 
-        self.filepath = os.path.join(self.path_efficiency, 'efficiency_snow_cover_up.nc')
-        self.save_dataset(temp_resampled, os.path.join(self.path_preprocessed, 'preprocessed_snow_cover.nc'))
-        self.save_dataset(dataset, self.filepath)
-        
         # Set the input data variable to True, which will trigger the on_change callback function
         self.input_data_available = True
-        logger.info("Input data now available, variable set to 'True'.")
+        logger.info("New SNODAS data available. Input data variable set to 'True'.")
 
     def on_change(self, source, property_name, old_value, new_value):
         """
@@ -436,48 +403,41 @@ class Environment(Observer):
         if (property_name == 'time') and (self.input_data_available == True):
 
             # Determine if day has changed
-            change = self.detect_level_change(new_value, old_value, 'week')
+            change = self.detect_level_change(new_value, old_value, 'day')
 
-            # Publish message if day, week, or month has changed OR if this is the initial layer
+            # Publish message if day, week, or month has changed
             if change or self.initial_layer:
                 # Open the NetCDF file
                 dataset = self.open_dataset(self.filepath)
-                logger.info(dataset)
 
                 # Select the data for the specified date
-                snow_layer, top_left, top_right, bottom_left, bottom_right = self.encode(
-                    dataset=dataset,
-                    # file_path=os.path.join(path_efficiency, 'efficiency_snow_cover_up.nc'),
-                    variable='Weekly_Snow_Cover',
-                    output_path='snow_raster_layer.png',
-                    scale='time',
-                    time_step=new_value.date().strftime("%Y-%m-%d"),
-                    geojson_path='WBD_10_HU2_4326.geojson')
+                swe_change_layer, top_left, top_right, bottom_left, bottom_right = self.encode(
+                                dataset=dataset,
+                                variable='swe_diff_abs',
+                                output_path='swe_diff_raster_layer.png',
+                                scale='time',
+                                time_step=new_value.date().strftime("%Y-%m-%d"),
+                                geojson_path='WBD_10_HU2_4326.geojson')
+                
+                # logger.info(resolution_layer)
+                # logger.info(f'{top_left}, {top_right}, {bottom_left}, {bottom_right}') 
                 
                 # Publish the message
+                logger.info(f'Publishing message for {new_value}')
                 self.app.send_message(
                     self.app.app_name,
                     "layer",
-                    SnowLayer(
-                        snow_layer=snow_layer,
+                    SWEChangeLayer(
+                        swe_change_layer=swe_change_layer,
                         top_left=top_left,
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right
                     ).json(),
                 )
+                logger.info('Publishing message successfully completed.')
 
                 self.initial_layer = False
-                # # merged_dataset.close()
-                # temp_resampled.close()
-                # dataset.close()
-                # xr.backends.file_manager.FILE_CACHE.clear()
-
-                # # Delete previous results
-                # output_file = os.path.join(path_nc, "snowcover-merged.nc")
-                # if os.path.exists(output_file):
-                #     os.remove(output_file)
-                #     logger.info(f"Existing file {output_file} removed.")
 
 def main():
     """
@@ -490,9 +450,9 @@ def main():
     CLIENT_ID = credentials["CLIENT_ID"]
     CLIENT_SECRET_KEY = credentials["CLIENT_SECRET_KEY"]
     VIRTUAL_HOST = credentials["VIRTUAL_HOST"]
-    IS_TLS = credentials["IS_TLS"].lower() == 'true'
+    IS_TLS = credentials["IS_TLS"].lower() == 'true'  # Convert to boolean
     # PREFIX = "sos"
-    # NAME = "resolution"
+    # NAME = "response"
     # SCALE = 1
 
     # Set the client credentials from the config file
@@ -525,7 +485,9 @@ def main():
         # shut_down_when_terminated=True,
     )
     # app.add_message_callback("snodas", "data", on_data)
-    app.add_message_callback("mod10c1", "data", environment.on_data)
+    app.add_message_callback("snodas", "data", environment.on_data)
 
+    # while True:
+    #     pass
 if __name__ == "__main__":
     main()

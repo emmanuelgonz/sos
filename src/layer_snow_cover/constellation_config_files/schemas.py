@@ -117,6 +117,15 @@ class SatelliteStatus(BaseModel):
     #     ..., description="Bottom right corner of satellite"
     # )
 
+class SNODASStatus(BaseModel):
+    """
+    
+    """
+    file_path: str = Field(..., description="Path to the SNODAS file")
+    publish_time: datetime = Field(..., description="Time in satellite reference frame wjen data was generated.")
+    start_date: datetime = Field(..., description="Start date for data.")
+    end_date: datetime = Field(..., description="End date for data.")
+    
 
 class GroundLocation(BaseModel):
     """
