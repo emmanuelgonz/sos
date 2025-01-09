@@ -5,16 +5,16 @@ This repository contains the various SOS applications integrated within the [Nov
 The manager application orchestrates the various applications by keeping a consistent time across applications. Upon initiation of manager, the applications are triggered and each is responsible for generating derived datasets or raster layers. Below is a table describing each application:
 
 ### Applications
-|Application|Category|Purpose|Data Source|Threshold|Aggregation|Developed|Updated|
-|:---------:|:------:|:-----:|:---------:|:-------:|:---------:|:-------:|:-----:|
-|Manager|Manager|Orchestrates applications, maintains time|NA|NA|NA|Y|Y|
-|SNODAS|Merged Data Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|Y|
-|MOD10C1|Merged Data Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|Y|
-|Snow Cover|Raster Layer Generator|Generates snow cover layer|MOD10C1|30% (snow cover)|Weekly|Y|Y|
-|Resolution|Raster Layer Generator|Generates resolution layer|SNODAS|50 mm (Abs. SWE difference)|Monthly|Y|Y|
-|Sensor Saturation|Raster Layer Generator|Generates sensor saturation layer|SNODAS|150 mm|Daily|N|N|
-|SWE Change|Raster Layer Generator|Generates SWE change layer|SNODAS|10 mm|Daily|Y|Y|
-|Surface Temperature|Raster Layer Generator|Generates surface temperature layer|AIRS Version 7 Level 3 Product|0 &deg;C|Daily|N|N|
+|Application|Category|Purpose|Data Source|Threshold|Aggregation|Developed|
+|:---------:|:------:|:-----:|:---------:|:-------:|:---------:|:-------:|
+|Manager|Manager|Orchestrates applications, maintains time|NA|NA|NA|Y|
+|SNODAS|Merged Data Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
+|MOD10C1|Merged Data Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
+|Snow Cover|Raster Layer Generator|Generates snow cover layer|MOD10C1|30% (snow cover)|Weekly|Y|
+|Resolution|Raster Layer Generator|Generates resolution layer|SNODAS|50 mm (Abs. SWE difference)|Monthly|Y|
+|Sensor Saturation|Raster Layer Generator|Generates sensor saturation layer|SNODAS|150 mm|Daily|N|
+|SWE Change|Raster Layer Generator|Generates SWE change layer|SNODAS|10 mm|Daily|Y|
+|Surface Temperature|Raster Layer Generator|Generates surface temperature layer|AIRS Version 7 Level 3 Product|0 &deg;C|Daily|N|
 
 These applications transmit status messages and base64-encoded images via the NOS-T message broker, which utilizes AMQP over RabbitMQ. The figure below illustrates the overall workflow:
 
