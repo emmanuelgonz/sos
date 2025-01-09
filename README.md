@@ -8,8 +8,8 @@ The manager application orchestrates the various applications by keeping a consi
 |Application|Category|Purpose|Data Source|Threshold|Aggregation|Developed|
 |:---------:|:------:|:-----:|:---------:|:-------:|:---------:|:-------:|
 |Manager|Manager|Orchestrates applications, maintains time|NA|NA|NA|Y|
-|SNODAS|Merged Data Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
-|MOD10C1|Merged Data Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
+|SNODAS|Merged Dataset Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
+|MOD10C1|Merged Dataset Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
 |Snow Cover|Raster Layer Generator|Generates snow cover layer|MOD10C1|30% (snow cover)|Weekly|Y|
 |Resolution|Raster Layer Generator|Generates resolution layer|SNODAS|50 mm (Abs. SWE difference)|Monthly|Y|
 |Sensor Saturation|Raster Layer Generator|Generates sensor saturation layer|SNODAS|150 mm|Daily|N|
