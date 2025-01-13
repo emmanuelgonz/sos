@@ -1,10 +1,11 @@
 # Snow Observing Strategy (SOS)
-This repository contains the various SOS applications integrated within the [Novel Observing Strategies Testbed (NOS-T)](https://github.com/code-lab-org/nost-tools). 
+
+This repository contains the codebase for SOS applications integrated within the [Novel Observing Strategies Testbed (NOS-T)](https://github.com/code-lab-org/nost-tools).
 
 ## Introduction
-The manager application orchestrates the various applications by keeping a consistent time across applications. Upon initiation of manager, the applications are triggered and each is responsible for generating derived datasets or raster layers. Below is a table describing each application:
 
-### Applications
+A single manager application is responsible for orchestrating the various applications and keeping a consistent time across applications. Upon initiation of the manager, various managed applications are triggered, each responsible for generating derived, merged datasets or raster layers sent as base64-encoded strings. Below is a table describing each application:
+
 |Application|Category|Purpose|Data Source|Threshold|Aggregation|Developed|
 |:---------:|:------:|:-----:|:---------:|:-------:|:---------:|:-------:|
 |Manager|Manager|Orchestrates applications, maintains time|NA|NA|NA|Y|
@@ -16,7 +17,7 @@ The manager application orchestrates the various applications by keeping a consi
 |SWE Change|Raster Layer Generator|Generates SWE change layer|SNODAS|10 mm|Daily|Y|
 |Surface Temperature|Raster Layer Generator|Generates surface temperature layer|AIRS Version 7 Level 3 Product|0 &deg;C|Daily|N|
 
-These applications transmit status messages and base64-encoded images via the NOS-T message broker, which utilizes AMQP over RabbitMQ. The figure below illustrates the overall workflow:
+Applications send status messages and base64-encoded images via a RabbitMQ message broker utilizing the Advanced Message Queuing Protocol (AMQP). The figure below illustrates the overall workflow:
 
 <img src="https://docs.google.com/drawings/d/e/2PACX-1vRb4C-NVOJblonVF0rZEC7BxwTX_6KmPXXnGQBV3DdvzSWTwJi-1SFxFE2HkTDZawDe-GBZnitIG2lq/pub?w=1489&amp;h=669">
 
@@ -61,40 +62,38 @@ The applications use the AWS SDK for Python, [Boto3](https://boto3.amazonaws.com
 
 ## Installation
 
-If you plan to run applications using Conda, you will need to install all dependencies. Below are the steps to install all dependencies using Conda:
-
-You can create a Conda environment to deploy applications. Please note that this method requires advanced experience working with GDAL, as it's installation can be quite tricky. If you run into issues here, please follow the[Docker](#docker-development) or [Docker compose](#docker-compose) sections. 
+Applications can be deployed using a Conda environment. Please note that this method requires advanced experience working with GDAL, as it's installation can be quite tricky. If you run into issues here, please follow the [Docker](#docker-development) or [Docker compose](#docker-compose) sections.
 
 To set up conda, follow the steps below:
 
 1. Create a Conda environment using Python 3.10
 
-```bash
-conda create --name sos python=3.10
-```
+    ```bash
+    conda create --name sos python=3.10
+    ```
 
 1. Activate your Conda environment
 
-```bash
-conda activate sos
-```
+    ```bash
+    conda activate sos
+    ```
 
 1. Install dependencies for GDAL
 
-```bash
-sudo add-apt-repository ppa:ubuntugis/ppa && sudo apt-get update
-sudo apt-get update
-sudo apt-get install gdal-bin
-sudo apt-get install libgdal-dev
-export CPLUS_INCLUDE_PATH=/usr/include/gdal
-export C_INCLUDE_PATH=/usr/include/gdal
-```
+    ```bash
+    sudo add-apt-repository ppa:ubuntugis/ppa && sudo apt-get update
+    sudo apt-get update
+    sudo apt-get install gdal-bin
+    sudo apt-get install libgdal-dev
+    export CPLUS_INCLUDE_PATH=/usr/include/gdal
+    export C_INCLUDE_PATH=/usr/include/gdal
+    ```
 
 1. Install requirements
 
-```bash
-python3 -m pip install -r requirements.txt
-```
+    ```bash
+    python3 -m pip install -r requirements.txt
+    ```
 
 > NOTE: If the final steps fails, it is likely due to the incorrect GDAL version being listed in the `requirements.txt` file. To correct this, identify the correct GDAL version for your system:
 
@@ -213,14 +212,14 @@ Three applications, including manager, satellite, and snow cover layer applicati
 
 1. Orchestrate the containers:
 
-```
-docker-compose up -d
-```
+    ```
+    docker-compose up -d
+    ```
 
-> NOTE: To confirm Docker containers are running, run the command: ```docker ps```. You should see three containers list: sos_manager, sos_satellites, and sos_snow_cover_layer.
+    > NOTE: To confirm Docker containers are running, run the command: ```docker ps```. You should see three containers list: sos_manager, sos_satellites, and sos_snow_cover_layer.
 
 1. To shutdown the Docker containers:
 
-```
-docker-compose down
-```
+    ```
+    docker-compose down
+    ```
