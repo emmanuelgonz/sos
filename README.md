@@ -97,7 +97,7 @@ To set up conda, follow the steps below:
     python3 -m pip install -r requirements.txt
     ```
 
-> NOTE: If the final steps fails, it is likely due to the incorrect GDAL version being listed in the `requirements.txt` file. To correct this, identify the correct GDAL version for your system:
+    > NOTE: If this final step fails, it is likely due to the incorrect GDAL version being listed in the [requirements.txt](./requirements.txt) file. To correct this, identify the correct GDAL version for your system:
 
 ### Troubleshooting
 
