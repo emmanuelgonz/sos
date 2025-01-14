@@ -6,16 +6,16 @@ This repository contains the codebase for SOS applications integrated within the
 
 A single manager application is responsible for orchestrating the various applications and keeping a consistent time across applications. Upon initiation of the manager, various managed applications are triggered, each responsible for generating derived, merged datasets or raster layers sent as base64-encoded strings. Below is a table describing each application:
 
-|Application|Category|Purpose|Data Source|Threshold|Aggregation|Developed|
-|:---------:|:------:|:-----:|:---------:|:-------:|:---------:|:-------:|
-|Manager|Manager|Orchestrates applications, maintains time|NA|NA|NA|Y|
-|SNODAS|Merged Dataset Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
-|MOD10C1|Merged Dataset Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|
-|Snow Cover|Raster Layer Generator|Generates snow cover layer|MOD10C1|30% (snow cover)|Weekly|Y|
-|Resolution|Raster Layer Generator|Generates resolution layer|SNODAS|50 mm (Abs. SWE difference)|Monthly|Y|
-|Sensor Saturation|Raster Layer Generator|Generates sensor saturation layer|SNODAS|150 mm|Daily|N|
-|SWE Change|Raster Layer Generator|Generates SWE change layer|SNODAS|10 mm|Daily|Y|
-|Surface Temperature|Raster Layer Generator|Generates surface temperature layer|AIRS Version 7 Level 3 Product|0 &deg;C|Daily|N|
+|Application|Category|Purpose|Data Source|Threshold|Aggregation|Developed|Containerized|
+|:---------:|:------:|:-----:|:---------:|:-------:|:---------:|:-------:|:-----------:|
+|Manager|Manager|Orchestrates applications, maintains time|NA|NA|NA|Y|Y|
+|SNODAS|Merged Dataset Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|N|
+|MOD10C1|Merged Dataset Generator|Merges data into a single, aggregated dataset|NA|NA|NA|Y|Y|
+|Snow Cover|Raster Layer Generator|Generates snow cover layer|MOD10C1|30% (snow cover)|Weekly|Y|Y|
+|Resolution|Raster Layer Generator|Generates resolution layer|SNODAS|50 mm (Abs. SWE difference)|Monthly|Y|N|
+|Sensor Saturation|Raster Layer Generator|Generates sensor saturation layer|SNODAS|150 mm|Daily|N|N|
+|SWE Change|Raster Layer Generator|Generates SWE change layer|SNODAS|10 mm|Daily|Y|N|
+|Surface Temperature|Raster Layer Generator|Generates surface temperature layer|AIRS Version 7 Level 3 Product|0 &deg;C|Daily|N|N|
 
 Applications send status messages and base64-encoded images via a RabbitMQ message broker utilizing the Advanced Message Queuing Protocol (AMQP). The figure below illustrates the overall workflow:
 
@@ -59,6 +59,8 @@ snow_observing_systems/
 ```
 
 The applications use the AWS SDK for Python, [Boto3](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html). Boto3 allows users to create, configure, and manage AWS services, including S3, Simple Notification Service (SNS), and Elastic Compute Cloud (EC2). Access to the AWS SDK is limited to SOS administrators as required by NASA's [Science Managed Cloud Environment (SMCE)](https://smce.nasa.gov/). 
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vTmZIFYDTr8kw22hmZzo7mpdfYMv_oKMk9DdagOu0ESL11nvcv374iLfNZTaMVI7LT1iGR6EyGKiY7A/pub?w=1318&amp;h=764" alt="Publish/Subscribe Workflow Diagram involving AWS resources including S3, Lambda, SNS, and SQS.">
 
 ## Installation
 
