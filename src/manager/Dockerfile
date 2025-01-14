@@ -6,5 +6,5 @@ COPY . /opt
 USER root
 
 # Set the entrypoint
-# ENTRYPOINT [ "/usr/bin/python3", "/opt/main.py" ]
-ENTRYPOINT [ "/opt/miniconda/envs/sos/bin/python", "/opt/main.py" ]
+ENTRYPOINT [ "/usr/bin/python3", "/opt/main.py" ]
+# ENTRYPOINT [ "/opt/miniconda/envs/sos/bin/python", "/opt/main.py" ]

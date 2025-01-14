@@ -6,7 +6,7 @@ import requests
 import shutil
 import tarfile
 import tempfile
-from osgeo import gdal 
+# from osgeo import gdal
 import pandas as pd
 from dotenv import dotenv_values, load_dotenv
 import rioxarray as rxr
