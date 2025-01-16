@@ -172,3 +172,6 @@ credentials
 resolution_raster_layer.png
 *.ipynb
 backup/
+*.nc
+*.png
+*.geojson
