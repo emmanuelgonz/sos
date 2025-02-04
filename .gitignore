@@ -175,3 +175,5 @@ backup/
 *.nc
 *.png
 *.geojson
+*.yml
+*.yaml
