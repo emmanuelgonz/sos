@@ -1,7 +1,6 @@
 import base64
 import io
 import logging
-import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
@@ -13,8 +12,6 @@ import pandas as pd
 import s3fs
 import xarray as xr
 from boto3.s3.transfer import TransferConfig
-from constellation_config_files.schemas import SWEChangeLayer, VectorLayer
-from dotenv import dotenv_values
 from joblib import Parallel, delayed
 from nost_tools.application_utils import ShutDownObserver
 from nost_tools.config import ConnectionConfig
@@ -820,7 +817,9 @@ class Environment(Observer):
             gpd.GeoSeries: GeoSeries of the Missouri Basin geometry
         """
         # Load the shapefile
+        logger.info(f"Loading Missouri Basin boundary.")
         mo_basin = gpd.read_file(file_path)
+        logger.info(f"Loading Missouri Basin boundary successfully completed.")
         return gpd.GeoSeries(
             Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326"
         )
@@ -836,7 +835,9 @@ class Environment(Observer):
             gpd.GeoDataFrame: GeoDataFrame of the US states geometry
         """
         # Load the shapefile
+        logger.info(f"Loading US states boundary.")
         us_map = gpd.read_file(file_path)
+        logger.info(f"Loading US states boundary successfully completed.")
         return us_map[~us_map.STUSPS.isin(["AK", "HI", "PR"])].to_crs("EPSG:4326")
 
     def open_polygons(self, geojson_path):
@@ -967,7 +968,7 @@ class Environment(Observer):
         config = TransferConfig(use_threads=False)
         s3.download_file(Bucket=bucket, Key=key, Filename=filename, Config=config)
         # Open the file
-        dataset = xr.open_dataset(filename, engine="h5netcdf")
+        dataset = xr.open_dataset(filename)  # , engine="h5netcdf")
         return dataset
 
     def download_geojson(self, s3, bucket, key, filename):
@@ -997,10 +998,6 @@ class Environment(Observer):
 
         """
         if property_name == Simulator.PROPERTY_MODE and new_value == Mode.EXECUTING:
-
-            # Load credentials
-            credentials = dotenv_values(".env")
-
             # Create a boto3 session
             session = self.start_session()
 
@@ -1021,13 +1018,7 @@ class Environment(Observer):
             # Load the Missouri River Basin boundary
             mo_basin = self.get_missouri_basin(
                 file_path="data/Downloaded_files/Mo_basin_shp/WBD_10_HU2_Shape/Shape/WBDHU2.shp"
-            )  # "WBD_10_HU2_Shape/Shape/WBDHU2.shp")
-
-            # Load the US states boundary
-            conus = self.get_us_states(
-                file_path="https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_20m.zip"
             )
-            logger.info("US states boundary loaded.")
 
             ##################
             # Combined dataset#
@@ -1043,402 +1034,374 @@ class Environment(Observer):
                 key=combined_output_file,
                 filename=combined_output_file,
             )
+            print(combined_dataset)
 
-            # # # Select the SWE_tavg variable for a specific time step (e.g., first time step)
-            # # swe_data = combined_dataset["SWE_tavg"].isel(time=0) # SEND AS MESSAGE
+            # # # # Select the SWE_tavg variable for a specific time step (e.g., first time step)
+            # # # swe_data = combined_dataset["SWE_tavg"].isel(time=0) # SEND AS MESSAGE
 
-            swe_layer_encoded, top_left, top_right, bottom_left, bottom_right = (
-                self.encode(
-                    dataset=combined_dataset,
-                    variable="SWE_tavg",
-                    output_path="swe_data.png",
-                    time_step=0,
-                    scale="time",
-                    geojson_path="WBD_10_HU2_4326.geojson",
-                    rotate=True,
-                )
-            )
-            del combined_dataset
+            # swe_layer_encoded, top_left, top_right, bottom_left, bottom_right = (
+            #     self.encode(
+            #         dataset=combined_dataset,
+            #         variable="SWE_tavg",
+            #         output_path="swe_data.png",
+            #         time_step=0,
+            #         scale="time",
+            #         geojson_path="WBD_10_HU2_4326.geojson",
+            #         rotate=True,
+            #     )
+            # )
+            # del combined_dataset
 
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=swe_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
-            time.sleep(5)
-
-            # ##############
-            # #ETA5 dataset#
-            # ##############
-            swe_output_file = "Efficiency_SWE_Change_20190310.nc"
-
-            # # Load the clipped dataset
-            # eta5_file = self.get_data(s3_filepath=f"snow-observing-systems/{swe_output_file}")
-
-            eta5_file = self.download_file(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=swe_output_file,
-                filename=swe_output_file,
-            )
-
-            # # Select the eta5 variable for a specific time step (e.g., first time step)
-            # eta5_data = eta5_file["eta5"].isel(time=1)
-
-            eta5_layer_encoded, _, _, _, _ = self.encode(
-                dataset=eta5_file,
-                variable="eta5",
-                output_path="eta5_data.png",
-                time_step=1,
-                scale="time",
-                geojson_path="WBD_10_HU2_4326.geojson",
-                rotate=True,
-            )
-            del eta5_file
-
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=eta5_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
-            time.sleep(5)
-
-            # ##############
-            # #ETA0 dataset#
-            # ##############
-            surfacetemp_output_file = "Efficiency_SurfTemp_20190310.nc"
-
-            # # Load the clipped dataset
-            # eta0_file = self.get_data(s3_filepath=f"snow-observing-systems/{surfacetemp_output_file}")
-
-            eta0_file = self.download_file(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=surfacetemp_output_file,
-                filename=surfacetemp_output_file,
-            )
-
-            # # Select the eta0 variable for a specific time step (e.g., first time step)
-            # eta0_data = eta0_file["eta0"].isel(time=1)
-
-            eta0_layer_encoded, _, _, _, _ = self.encode(
-                dataset=eta0_file,
-                variable="eta0",
-                output_path="eta0_data.png",
-                time_step=1,
-                scale="time",
-                geojson_path="WBD_10_HU2_4326.geojson",
-                rotate=True,
-            )
-            del eta0_file
-
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=eta0_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
-            time.sleep(5)
-
-            # ###################
-            # #ETA2 GCOM dataset#
-            # ###################
-            sensor_gcom_output_file = "Efficiency_Sensor_GCOM_20190310.nc"
-
-            # # Load the clipped dataset
-            # eta2_file_GCOM = self.get_data(s3_filepath=f"snow-observing-systems/{sensor_gcom_output_file}")
-
-            eta2_file_GCOM = self.download_file(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=sensor_gcom_output_file,
-                filename=sensor_gcom_output_file,
-            )
-
-            # # Select the eta2 variable for a specific time step (e.g., first time step)
-            # eta2_data_GCOM = eta2_file_GCOM["eta2"].isel(time=1)
-
-            eta2_gcom_layer_encoded, _, _, _, _ = self.encode(
-                dataset=eta2_file_GCOM,
-                variable="eta2",
-                output_path="eta2_gcom_data.png",
-                time_step=1,
-                scale="time",
-                geojson_path="WBD_10_HU2_4326.geojson",
-                rotate=True,
-            )
-            del eta2_file_GCOM
-
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=eta2_gcom_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
-            time.sleep(5)
-
-            # ######################
-            # #ETA2 Capella dataset#
-            # ######################
-            sensor_capella_output_file = "Efficiency_Sensor_Capella_20190310.nc"
-
-            # # Load the clipped dataset
-            # eta2_file_Capella = self.get_data(s3_filepath=f"snow-observing-systems/{sensor_capella_output_file}")
-
-            eta2_file_Capella = self.download_file(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=sensor_capella_output_file,
-                filename=sensor_capella_output_file,
-            )
-
-            # # Select the eta2 variable for a specific time step (e.g., first time step)
-            # eta2_data_Capella = eta2_file_Capella["eta2"].isel(time=1)
-
-            eta2_capella_layer_encoded, _, _, _, _ = self.encode(
-                dataset=eta2_file_Capella,
-                variable="eta2",
-                output_path="eta2_capella_data.png",
-                time_step=1,
-                scale="time",
-                geojson_path="WBD_10_HU2_4326.geojson",
-                rotate=True,
-            )
-            del eta2_file_Capella
-
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=eta2_capella_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
-            time.sleep(5)
-
-            # ##########
-            # #GCOM ETA#
-            # ##########
-            gcom_combine_multiply_output_file = (
-                "Combined_Efficiency_Weighted_Product_GCOM_20190310.nc"
-            )
-
-            # # Load the clipped dataset
-            # gcom_dataset = self.get_data(s3_filepath=f"snow-observing-systems/{gcom_combine_multiply_output_file}")
-
-            gcom_dataset = self.download_file(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=gcom_combine_multiply_output_file,
-                filename=gcom_combine_multiply_output_file,
-            )
-
-            # # Select the combined_eta variable for a specific time step (e.g., first time step)
-            # gcom_eta = gcom_dataset["combined_eta"].isel(time=1)
-
-            gcom_eta_layer_encoded, _, _, _, _ = self.encode(
-                dataset=gcom_dataset,
-                variable="combined_eta",
-                output_path="gcom_eta_combined_data.png",
-                time_step=1,
-                scale="time",
-                geojson_path="WBD_10_HU2_4326.geojson",
-                rotate=True,
-            )
-            del gcom_dataset
-
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=gcom_eta_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
-            time.sleep(5)
-
-            # #############
-            # #Capella ETA#
-            # #############
-            capella_combine_multiply_output_file = (
-                "Combined_Efficiency_Weighted_Product_Capella_20190310.nc"
-            )
-
-            # # Load the clipped dataset
-            # capella_dataset= self.get_data(s3_filepath=f"snow-observing-systems/{capella_combine_multiply_output_file}")
-
-            capella_dataset = self.download_file(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=capella_combine_multiply_output_file,
-                filename=capella_combine_multiply_output_file,
-            )
-
-            # # Select the combined_eta variable for a specific time step (e.g., first time step)
-            # capella_eta = capella_dataset["combined_eta"].isel(time=1)
-
-            capella_eta_layer_encoded, _, _, _, _ = self.encode(
-                dataset=capella_dataset,
-                variable="combined_eta",
-                output_path="capella_eta_combined_data.png",
-                time_step=1,
-                scale="time",
-                geojson_path="WBD_10_HU2_4326.geojson",
-                rotate=True,
-            )
-            del capella_dataset
-
-            self.app.send_message(
-                self.app.app_name,
-                "layer",
-                SWEChangeLayer(
-                    swe_change_layer=capella_eta_layer_encoded,
-                    top_left=top_left,
-                    top_right=top_right,
-                    bottom_left=bottom_left,
-                    bottom_right=bottom_right,
-                ).json(),
-            )
-            logger.info("Publishing message successfully completed.")
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=swe_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
             # time.sleep(5)
 
-            # ###########
-            # #Final ETA#
-            # ###########
-            logger.info("Loading all cells polygon...")
-            final_eta_output_file = "Reward_20190310.geojson"
+            # # ##############
+            # # #ETA5 dataset#
+            # # ##############
+            # swe_output_file = "Efficiency_SWE_Change_20190310.nc"
 
-            # Load the GeoDataFrame
-            # final_eta_gdf = self.get_data_geojson(s3_filepath=f"snow-observing-systems/{final_eta_output_file}")
-            final_eta_gdf = self.download_geojson(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=final_eta_output_file,
-                filename=final_eta_output_file,
-            )
-            # final_eta_gdf = get_data_geojson_alternative(s3=s3, bucket_name='snow-observing-systems', key='Reward_20190310.geojson')
+            # # # Load the clipped dataset
+            # # eta5_file = self.get_data(s3_filepath=f"snow-observing-systems/{swe_output_file}")
 
-            # Clip Final Eta GDF and ground tracks to the Missouri Basin
-            final_eta_gdf_clipped = final_eta_gdf  # gpd.clip(final_eta_gdf, mo_basin)
+            # eta5_file = self.download_file(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=swe_output_file,
+            #     filename=swe_output_file,
+            # )
 
-            # Convert the clipped GeoDataFrame to GeoJSON and send as message
-            all_json_data = final_eta_gdf_clipped.drop(
-                "time", axis=1, errors="ignore"
-            ).to_json()
-            self.app.send_message(
-                self.app.app_name,
-                "all",
-                VectorLayer(vector_layer=all_json_data).json(),
-            )
-            logger.info("(ALL) Publishing message successfully completed.")
-            time.sleep(5)
+            # # # Select the eta5 variable for a specific time step (e.g., first time step)
+            # # eta5_data = eta5_file["eta5"].isel(time=1)
 
-            # #######################
-            # #Find Optimal Solution#
-            # #######################
-            print("Loading selected cells polygon...")
-            output_geojson = "Selected_Cells_Optimization.geojson"
+            # eta5_layer_encoded, _, _, _, _ = self.encode(
+            #     dataset=eta5_file,
+            #     variable="eta5",
+            #     output_path="eta5_data.png",
+            #     time_step=1,
+            #     scale="time",
+            #     geojson_path="WBD_10_HU2_4326.geojson",
+            #     rotate=True,
+            # )
+            # del eta5_file
 
-            # Load the GeoDataFrame
-            # final_eta_gdf = gpd.read_file("Final_Eta_GDF.geojson")  # All cells with final_eta values
-            # selected_cells_gdf = self.get_data_geojson(s3_filepath=f"snow-observing-systems/{output_geojson}") #gpd.read_file("Selected_Cells_Optimization.geojson")  # Selected cells
-            selected_cells_gdf = self.download_geojson(
-                s3=s3,
-                bucket="snow-observing-systems",
-                key=output_geojson,
-                filename=output_geojson,
-            )
-            # Clip Final Eta GDF and ground tracks to the Missouri Basin
-            selected_cells_gdf_clipped = (
-                selected_cells_gdf  # gpd.clip(selected_cells_gdf, mo_basin)
-            )
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=eta5_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
+            # time.sleep(5)
 
-            # Convert the clipped GeoDataFrame to GeoJSON and send as message
-            selected_json_data = selected_cells_gdf_clipped.drop(
-                "time", axis=1, errors="ignore"
-            ).to_json()
-            self.app.send_message(
-                self.app.app_name,
-                "selected",
-                VectorLayer(vector_layer=selected_json_data).json(),
-            )
-            logger.info("(SELECTED) Publishing message successfully completed.")
-            time.sleep(5)
+            # # ##############
+            # # #ETA0 dataset#
+            # # ##############
+            # surfacetemp_output_file = "Efficiency_SurfTemp_20190310.nc"
 
-            # # Ensure CRS matches for consistency
-            # selected_cells_gdf = selected_cells_gdf.to_crs(mo_basin.crs)
-            # final_eta_gdf = final_eta_gdf.to_crs(mo_basin.crs)
-            s3.close()
+            # # # Load the clipped dataset
+            # # eta0_file = self.get_data(s3_filepath=f"snow-observing-systems/{surfacetemp_output_file}")
+
+            # eta0_file = self.download_file(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=surfacetemp_output_file,
+            #     filename=surfacetemp_output_file,
+            # )
+
+            # # # Select the eta0 variable for a specific time step (e.g., first time step)
+            # # eta0_data = eta0_file["eta0"].isel(time=1)
+
+            # eta0_layer_encoded, _, _, _, _ = self.encode(
+            #     dataset=eta0_file,
+            #     variable="eta0",
+            #     output_path="eta0_data.png",
+            #     time_step=1,
+            #     scale="time",
+            #     geojson_path="WBD_10_HU2_4326.geojson",
+            #     rotate=True,
+            # )
+            # del eta0_file
+
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=eta0_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
+            # time.sleep(5)
+
+            # # ###################
+            # # #ETA2 GCOM dataset#
+            # # ###################
+            # sensor_gcom_output_file = "Efficiency_Sensor_GCOM_20190310.nc"
+
+            # # # Load the clipped dataset
+            # # eta2_file_GCOM = self.get_data(s3_filepath=f"snow-observing-systems/{sensor_gcom_output_file}")
+
+            # eta2_file_GCOM = self.download_file(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=sensor_gcom_output_file,
+            #     filename=sensor_gcom_output_file,
+            # )
+
+            # # # Select the eta2 variable for a specific time step (e.g., first time step)
+            # # eta2_data_GCOM = eta2_file_GCOM["eta2"].isel(time=1)
+
+            # eta2_gcom_layer_encoded, _, _, _, _ = self.encode(
+            #     dataset=eta2_file_GCOM,
+            #     variable="eta2",
+            #     output_path="eta2_gcom_data.png",
+            #     time_step=1,
+            #     scale="time",
+            #     geojson_path="WBD_10_HU2_4326.geojson",
+            #     rotate=True,
+            # )
+            # del eta2_file_GCOM
+
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=eta2_gcom_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
+            # time.sleep(5)
+
+            # # ######################
+            # # #ETA2 Capella dataset#
+            # # ######################
+            # sensor_capella_output_file = "Efficiency_Sensor_Capella_20190310.nc"
+
+            # # # Load the clipped dataset
+            # # eta2_file_Capella = self.get_data(s3_filepath=f"snow-observing-systems/{sensor_capella_output_file}")
+
+            # eta2_file_Capella = self.download_file(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=sensor_capella_output_file,
+            #     filename=sensor_capella_output_file,
+            # )
+
+            # # # Select the eta2 variable for a specific time step (e.g., first time step)
+            # # eta2_data_Capella = eta2_file_Capella["eta2"].isel(time=1)
+
+            # eta2_capella_layer_encoded, _, _, _, _ = self.encode(
+            #     dataset=eta2_file_Capella,
+            #     variable="eta2",
+            #     output_path="eta2_capella_data.png",
+            #     time_step=1,
+            #     scale="time",
+            #     geojson_path="WBD_10_HU2_4326.geojson",
+            #     rotate=True,
+            # )
+            # del eta2_file_Capella
+
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=eta2_capella_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
+            # time.sleep(5)
+
+            # # ##########
+            # # #GCOM ETA#
+            # # ##########
+            # gcom_combine_multiply_output_file = (
+            #     "Combined_Efficiency_Weighted_Product_GCOM_20190310.nc"
+            # )
+
+            # # # Load the clipped dataset
+            # # gcom_dataset = self.get_data(s3_filepath=f"snow-observing-systems/{gcom_combine_multiply_output_file}")
+
+            # gcom_dataset = self.download_file(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=gcom_combine_multiply_output_file,
+            #     filename=gcom_combine_multiply_output_file,
+            # )
+
+            # # # Select the combined_eta variable for a specific time step (e.g., first time step)
+            # # gcom_eta = gcom_dataset["combined_eta"].isel(time=1)
+
+            # gcom_eta_layer_encoded, _, _, _, _ = self.encode(
+            #     dataset=gcom_dataset,
+            #     variable="combined_eta",
+            #     output_path="gcom_eta_combined_data.png",
+            #     time_step=1,
+            #     scale="time",
+            #     geojson_path="WBD_10_HU2_4326.geojson",
+            #     rotate=True,
+            # )
+            # del gcom_dataset
+
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=gcom_eta_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
+            # time.sleep(5)
+
+            # # #############
+            # # #Capella ETA#
+            # # #############
+            # capella_combine_multiply_output_file = (
+            #     "Combined_Efficiency_Weighted_Product_Capella_20190310.nc"
+            # )
+
+            # # # Load the clipped dataset
+            # # capella_dataset= self.get_data(s3_filepath=f"snow-observing-systems/{capella_combine_multiply_output_file}")
+
+            # capella_dataset = self.download_file(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=capella_combine_multiply_output_file,
+            #     filename=capella_combine_multiply_output_file,
+            # )
+
+            # # # Select the combined_eta variable for a specific time step (e.g., first time step)
+            # # capella_eta = capella_dataset["combined_eta"].isel(time=1)
+
+            # capella_eta_layer_encoded, _, _, _, _ = self.encode(
+            #     dataset=capella_dataset,
+            #     variable="combined_eta",
+            #     output_path="capella_eta_combined_data.png",
+            #     time_step=1,
+            #     scale="time",
+            #     geojson_path="WBD_10_HU2_4326.geojson",
+            #     rotate=True,
+            # )
+            # del capella_dataset
+
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "layer",
+            #     SWEChangeLayer(
+            #         swe_change_layer=capella_eta_layer_encoded,
+            #         top_left=top_left,
+            #         top_right=top_right,
+            #         bottom_left=bottom_left,
+            #         bottom_right=bottom_right,
+            #     ).json(),
+            # )
+            # logger.info("Publishing message successfully completed.")
+            # # time.sleep(5)
+
+            # # ###########
+            # # #Final ETA#
+            # # ###########
+            # logger.info("Loading all cells polygon...")
+            # final_eta_output_file = "Reward_20190310.geojson"
+
+            # # Load the GeoDataFrame
+            # # final_eta_gdf = self.get_data_geojson(s3_filepath=f"snow-observing-systems/{final_eta_output_file}")
+            # final_eta_gdf = self.download_geojson(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=final_eta_output_file,
+            #     filename=final_eta_output_file,
+            # )
+            # # final_eta_gdf = get_data_geojson_alternative(s3=s3, bucket_name='snow-observing-systems', key='Reward_20190310.geojson')
+
+            # # Clip Final Eta GDF and ground tracks to the Missouri Basin
+            # final_eta_gdf_clipped = final_eta_gdf  # gpd.clip(final_eta_gdf, mo_basin)
+
+            # # Convert the clipped GeoDataFrame to GeoJSON and send as message
+            # all_json_data = final_eta_gdf_clipped.drop(
+            #     "time", axis=1, errors="ignore"
+            # ).to_json()
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "all",
+            #     VectorLayer(vector_layer=all_json_data).json(),
+            # )
+            # logger.info("(ALL) Publishing message successfully completed.")
+            # time.sleep(5)
+
+            # # #######################
+            # # #Find Optimal Solution#
+            # # #######################
+            # print("Loading selected cells polygon...")
+            # output_geojson = "Selected_Cells_Optimization.geojson"
+
+            # # Load the GeoDataFrame
+            # # final_eta_gdf = gpd.read_file("Final_Eta_GDF.geojson")  # All cells with final_eta values
+            # # selected_cells_gdf = self.get_data_geojson(s3_filepath=f"snow-observing-systems/{output_geojson}") #gpd.read_file("Selected_Cells_Optimization.geojson")  # Selected cells
+            # selected_cells_gdf = self.download_geojson(
+            #     s3=s3,
+            #     bucket="snow-observing-systems",
+            #     key=output_geojson,
+            #     filename=output_geojson,
+            # )
+            # # Clip Final Eta GDF and ground tracks to the Missouri Basin
+            # selected_cells_gdf_clipped = (
+            #     selected_cells_gdf  # gpd.clip(selected_cells_gdf, mo_basin)
+            # )
+
+            # # Convert the clipped GeoDataFrame to GeoJSON and send as message
+            # selected_json_data = selected_cells_gdf_clipped.drop(
+            #     "time", axis=1, errors="ignore"
+            # ).to_json()
+            # self.app.send_message(
+            #     self.app.app_name,
+            #     "selected",
+            #     VectorLayer(vector_layer=selected_json_data).json(),
+            # )
+            # logger.info("(SELECTED) Publishing message successfully completed.")
+            # time.sleep(5)
+
+            # # # Ensure CRS matches for consistency
+            # # selected_cells_gdf = selected_cells_gdf.to_crs(mo_basin.crs)
+            # # final_eta_gdf = final_eta_gdf.to_crs(mo_basin.crs)
+            # s3.close()
 
 
 def main():
-    # # Load credentials from a .env file in current working directory
-    # credentials = dotenv_values(".env")
-    # HOST, RABBITMQ_PORT, KEYCLOAK_PORT, KEYCLOAK_REALM = (
-    #     credentials["HOST"],
-    #     int(credentials["RABBITMQ_PORT"]),
-    #     int(credentials["KEYCLOAK_PORT"]),
-    #     str(credentials["KEYCLOAK_REALM"]),
-    # )
-    # USERNAME, PASSWORD = credentials["USERNAME"], credentials["PASSWORD"]
-    # CLIENT_ID = credentials["CLIENT_ID"]
-    # CLIENT_SECRET_KEY = credentials["CLIENT_SECRET_KEY"]
-    # VIRTUAL_HOST = credentials["VIRTUAL_HOST"]
-    # IS_TLS = credentials["IS_TLS"].lower() == "true"  # Convert to boolean
-
-    # Set the client credentials from the config file
-    # config = ConnectionConfig(
-    #     USERNAME,
-    #     PASSWORD,
-    #     HOST,
-    #     RABBITMQ_PORT,
-    #     KEYCLOAK_PORT,
-    #     KEYCLOAK_REALM,
-    #     CLIENT_ID,
-    #     CLIENT_SECRET_KEY,
-    #     VIRTUAL_HOST,
-    #     IS_TLS)
-
     # Load config
     config = ConnectionConfig(yaml_file="sos.yaml")
 
     # Define the simulation parameters
-    SCALE = config.rc.simulation_configuration.execution_parameters.timescale
-    PREFIX = config.rc.simulation_configuration.execution_parameters.prefix
     NAME = "swe_change"
 
     # create the managed application
@@ -1452,13 +1415,13 @@ def main():
 
     # start up the application on PREFIX, publish time status every 10 seconds of wallclock time
     app.start_up(
-        PREFIX,
+        config.rc.simulation_configuration.execution_parameters.prefix,
         config,
-        True,
-        time_status_step=timedelta(seconds=10) * SCALE,
-        time_status_init=datetime(2024, 1, 7, tzinfo=timezone.utc),
-        time_step=timedelta(seconds=1) * SCALE,
-        # shut_down_when_terminated=True,
+        # True,
+        # time_status_step=timedelta(seconds=10) * SCALE,
+        # time_status_init=datetime(2024, 1, 7, tzinfo=timezone.utc),
+        # time_step=timedelta(seconds=1) * SCALE,
+        # # shut_down_when_terminated=True,
     )
 
 
