@@ -137,6 +137,28 @@ class Environment(Observer):
 
         return component_gdf
 
+    def remove_duplicates(self):
+
+        # Separate rows with 'simulator_simulation_status' as 'Completed'
+        completed_rows = self.master_gdf[
+            self.master_gdf["simulator_simulation_status"] == "Completed"
+        ]
+
+        # Separate rows with 'simulator_simulation_status' as None
+        none_rows = self.master_gdf[
+            self.master_gdf["simulator_simulation_status"].isna()
+        ]
+
+        # Find the most recent row for each geometry where 'simulator_simulation_status' is None
+        most_recent_none_rows = none_rows.loc[
+            none_rows.groupby("geometry")["planner_time"].idxmax()
+        ]
+
+        # Combine the completed rows with the most recent none rows
+        self.master_gdf = pd.concat(
+            [completed_rows, most_recent_none_rows], ignore_index=True
+        )
+
     # def on_simulator(self, ch, method, properties, body):
     #     body.new_data > "true" master
     #     print(body)
@@ -170,7 +192,9 @@ class Environment(Observer):
 
         logger.info(f"Range of values in 'simulator_id': {min_value} to {max_value}")
 
+        # Concatenate all components into a single GeoDataFrame
         self.master_gdf = pd.concat(self.master_components, ignore_index=True)
+        self.remove_duplicates()
 
         # Convert the clipped GeoDataFrame to GeoJSON and send as message
         selected_json_data = self.master_gdf[
