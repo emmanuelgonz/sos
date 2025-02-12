@@ -105,10 +105,10 @@ class Environment(Observer):
         """
         logger.info("Processing component GeoJSON.")
         # Ensure the geometry is in a projected CRS before calculating the centroid
-        if component_gdf.crs.is_geographic:
-            component_gdf = component_gdf.to_crs(
-                epsg=3395
-            )  # Use EPSG:3395 for projection
+        # if component_gdf.crs.is_geographic:
+        #     component_gdf = component_gdf.to_crs(
+        #         epsg=3395
+        #     )  # Use EPSG:3395 for projection
 
         # Add the centroid of the geometry
         component_gdf["centroid"] = component_gdf.centroid
@@ -197,16 +197,23 @@ class Environment(Observer):
         self.remove_duplicates()
 
         # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        selected_json_data = self.master_gdf[
-            ["planner_final_eta", "planner_time", "geometry"]
-        ].to_json()
+        # selected_json_data = self.master_gdf[
+        #     ["planner_final_eta", "planner_time", "geometry"]
+        # ].to_json()
+        # self.app.send_message(
+        #     "swe_change",
+        #     "selected",
+        #     VectorLayer(vector_layer=selected_json_data).json(),
+        # )
+        # logger.info("(SELECTED) Publishing message successfully completed.")
+        self.master_gdf.to_file("final_master.geojson", driver="GeoJSON")
+        selected_json_data = self.master_gdf.to_json()
         self.app.send_message(
-            "swe_change",
-            "selected",
+            self.app.app_name,
+            "master",
             VectorLayer(vector_layer=selected_json_data).json(),
         )
-        logger.info("(SELECTED) Publishing message successfully completed.")
-        self.master_gdf.to_file("final_master.geojson", driver="GeoJSON")
+        logger.info(f"{self.app.app_name} sent message.")
 
     def on_change(self, source, property_name, old_value, new_value):
         if property_name == Simulator.PROPERTY_MODE and new_value == Mode.EXECUTING:
@@ -214,13 +221,15 @@ class Environment(Observer):
                 "Switched to EXECUTING mode. Counter and master components list initialized."
             )
             # self.first_run = True
-        # if property_name == Simulator.PROPERTY_MODE and new_value == Mode.TERMINATING:
-        #     logger.info(
-        #         "Switched to TERMINATING mode. Shutting down the application and saving data."
-        #     )
-        #     # master_gdf = pd.concat(self.master_components, ignore_index=True)
-        #     self.master_gdf.to_file("final_master.geojson", driver="GeoJSON")
-        #     # self.app.shut_down()
+        if property_name == Simulator.PROPERTY_MODE and new_value == Mode.TERMINATING:
+            logger.info(
+                "Switched to TERMINATING mode. Shutting down the application and saving data."
+            )
+            # master_gdf = pd.concat(self.master_components, ignore_index=True)
+            logger.info(self.master_gdf)
+            # self.master_gdf.to_file("final_master.geojson", driver="GeoJSON")
+            # self.app.shut_down()
+            # logger.info("Data saving successfully completed.")
 
 
 def main():

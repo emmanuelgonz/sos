@@ -1620,8 +1620,8 @@ class Environment(Observer):
                     "selected_cells",
                     VectorLayer(vector_layer=selected_json_data).json(),
                 )
-                logger.info("(SELECTED) Publishing message successfully completed.")
-                time.sleep(15)
+                # logger.info("(SELECTED) Publishing message successfully completed.")
+                # time.sleep(15)
 
     def on_change2(self, source, property_name, old_value, new_value):
         if property_name == "time":
