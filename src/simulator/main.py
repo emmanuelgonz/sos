@@ -290,9 +290,39 @@ class Environment(Observer):
                 #         results["geometry"].iloc[0],
                 #     ],
                 # }
-                
-                self.req.to_file(f"local_master_{self.date}.geojson", driver="GeoJSON")
-                logger.info("Successfully updated local master GeoJSON file.")
+
+                if not self.req.empty:
+                    # Set values greater than current time to None
+                    self.req.loc[
+                        pd.to_datetime(self.req["simulator_completion_date"]).dt.date
+                        > self.app.simulator._time.date(),
+                        "simulator_simulation_status",
+                    ] = None
+                    self.req.loc[
+                        pd.to_datetime(self.req["simulator_completion_date"]).dt.date
+                        > self.app.simulator._time.date(),
+                        "simulator_expiration_date",
+                    ] = pd.NaT
+                    self.req.loc[
+                        pd.to_datetime(self.req["simulator_completion_date"]).dt.date
+                        > self.app.simulator._time.date(),
+                        "simulator_satellite",
+                    ] = None
+                    self.req.loc[
+                        pd.to_datetime(self.req["simulator_completion_date"]).dt.date
+                        > self.app.simulator._time.date(),
+                        "simulator_polygon_groundtrack",
+                    ] = None
+                    self.req.loc[
+                        pd.to_datetime(self.req["simulator_completion_date"]).dt.date
+                        > self.app.simulator._time.date(),
+                        "simulator_completion_date",
+                    ] = pd.NaT
+
+                    self.req.to_file(
+                        f"local_master_{self.date}.geojson", driver="GeoJSON"
+                    )
+                    logger.info("Successfully updated local master GeoJSON file.")
                 self.first_run = False
 
                 # Regenerating observations with respect to updated list
@@ -356,7 +386,7 @@ class Environment(Observer):
         self._time = self._next_time
 
         # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        selected_data = self.req[["planner_final_eta", "planner_time", "geometry"]]
+        selected_data = self.req[["planner_final_eta", "planner_time", "simulator_simulation_status", "geometry"]] # Add simulation time
         selected_data["planner_time"] = selected_data["planner_time"].astype(str)
         selected_json_data = selected_data.to_json()
         self.app.send_message(
