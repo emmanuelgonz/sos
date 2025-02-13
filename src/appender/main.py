@@ -89,6 +89,7 @@ class Environment(Observer):
                 "simulator_simulation_status",
                 "simulator_completion_date",
                 "simulator_satellite",
+                "simulator_polygon_groundtrack",
                 "geometry",
             ]
         ]
@@ -206,7 +207,9 @@ class Environment(Observer):
         #     VectorLayer(vector_layer=selected_json_data).json(),
         # )
         # logger.info("(SELECTED) Publishing message successfully completed.")
-        self.master_gdf.to_file("final_master.geojson", driver="GeoJSON")
+        date = self.app.simulator._time
+        date = str(date.date()).replace("-", "")
+        self.master_gdf.to_file(f"master_{date}.geojson", driver="GeoJSON")
         selected_json_data = self.master_gdf.to_json()
         self.app.send_message(
             self.app.app_name,

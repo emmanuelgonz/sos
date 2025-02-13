@@ -37,8 +37,8 @@ class Environment(Observer):
 
     def __init__(self, app):  # , grounds):
         self.app = app
-        self.first_run = True
-        self.flag = 0
+        self.first_run = None
+        self.flag = None
 
     def const(self):  # initialize_snowglobe_constellation(self):
         # logger.info("Initializing SnowGlobe constellation.")
@@ -75,11 +75,38 @@ class Environment(Observer):
         # logger.info("Initializing SnowGlobe constellation successfully completed.")
 
     def user_request(self):  # filter_master_file(self):
-        if not self.first_run:
-            logger.info("Reading local master GeoJSON file.")
-            self.req = gpd.read_file("local_master.geojson")
-        else:
+
+        if self.first_run:
             logger.info("Using master file sent by planner.")
+            self.req = self.gdf
+            start = self.app._sim_start_time
+            stop = self.app._sim_stop_time
+            current = self.app.simulator._time
+            previous = current - timedelta(1)
+            previous_reformat = str(previous.date()).replace("-", "")
+
+            logger.info(f"Start Time: {start}.")
+            logger.info(f"Stop Time: {stop}.")
+            logger.info(f"Current Time: {current}.")
+            logger.info(f"Previous Time: {previous}.")
+
+            if previous.date() > start.date():
+                logger.info("Reading previous local master GeoJSON file.")
+                logger.info(f"Length of Request: {len(self.req)}.")
+                self.previous = gpd.read_file(
+                    f"local_master_{previous_reformat}.geojson"
+                )
+                self.req = (
+                    self.req.set_index("geometry")
+                    .combine_first(self.previous.set_index("geometry"))
+                    .reset_index()
+                )
+                self.req = gpd.GeoDataFrame(self.req, crs=4326, geometry="geometry")
+                logger.info(f"Length of Request After Merge: {len(self.req)}.")
+
+        else:
+            logger.info("Reading local master GeoJSON file.")
+            self.req = gpd.read_file(f"local_master_{self.date}.geojson")
         self.filtered_req = self.req[
             self.req["simulator_simulation_status"].isna()
             | (self.req["simulator_simulation_status"] == "None")
@@ -87,10 +114,12 @@ class Environment(Observer):
 
     def opportunity(self, start_time=None):
         logger.info("Calculating opportunity.")
-        self.const()
-        self.user_request()
+        # self.const()
+        # self.user_request()
         start_time = start_time or self._time
         end = start_time + timedelta(1)  # 2)
+        start_time = start_time.replace(tzinfo=timezone.utc)
+        end = end.replace(tzinfo=timezone.utc)
         combined_results = pd.DataFrame()
         for index, row in self.filtered_req.iterrows():
             loc = Point(
@@ -106,28 +135,37 @@ class Environment(Observer):
         logger.info("Calculating opportunity successfully completed.")
 
     def on_appender(self, ch, method, properties, body):
+        # Initialization
+        self.first_run = True
+
+        # Convert the message body to a string then to a GeoDataFrame
         body = body.decode("utf-8")
         data = VectorLayer.parse_raw(body)
 
-        # Convert the string back to a GeoJSON object
-        geojson_obj = json.loads(data.vector_layer)
+        # # Convert the string back to a GeoJSON object
+        # geojson_obj = json.loads(data.vector_layer)
 
         # Create a GeoDataFrame from the GeoJSON object
-        self.req = gpd.GeoDataFrame.from_features(
-            geojson_obj["features"], crs="EPSG:4326"
+        self.gdf = gpd.GeoDataFrame.from_features(
+            json.loads(data.vector_layer)["features"], crs="EPSG:4326"
         )
-        self.req["planner_geometry"] = self.req["geometry"]
 
         # Initialization
         self.const()  # previously initialize_snowglobe_constellation()
         self.user_request()  # previously filter_master_file()
-        # self._time = self.app.simulator._time
-        self._time = self._next_time = self._init_time = self.app.simulator._time
-        flag = 0
-        self._next_time = self._time + timedelta(days=1)
+        self.first_run = False
 
-        # updating user requests
-        self.user_request()
+        logger.info(f"Length of Request: {len(self.req)}.")
+        logger.info(f"Length of GeoDataFrame: {len(self.gdf)}.")
+
+        # Define values for the first run
+        self._time = self._next_time = self._init_time = self.app.simulator._time
+        self.date = str(self._time.date()).replace("-", "")
+        self._next_time = self._time + timedelta(days=1)
+        flag = 0
+
+        # # updating user requests
+        # self.user_request()
 
         # self.filtered_req = gpd.GeoDataFrame()
         # Error handler
@@ -159,6 +197,8 @@ class Environment(Observer):
         ]  # satellite collecting the observation
         prev_observation_time = None
         len_rs = len(self.combined_results)
+
+        logger.info(f"Length of combined results: {len_rs}.")
 
         while self.observation_time < self._next_time:
             len_rs = len(self.combined_results)
@@ -192,7 +232,6 @@ class Environment(Observer):
             else:
 
                 prev_observation_time = self.observation_time
-                print(f"Next observation {self.observation_time}")
                 self.req  # reads the requests file
 
                 # Formatting
@@ -228,9 +267,9 @@ class Environment(Observer):
                 results = collect_ground_track(
                     sat_object, [self.observation_time], crs="spice"
                 )
-                self.req.loc[self.req.simulator_id == self.id, "geometry"] = results[
-                    "geometry"
-                ].iloc[0]
+                self.req.loc[
+                    self.req.simulator_id == self.id, "simulator_polygon_groundtrack"
+                ] = results["geometry"].iloc[0]
 
                 # Values to be sent to appender ###  EMMANUEL PLACEHOLDER
                 # Define the data structure for the GeoDataFrame
@@ -251,35 +290,8 @@ class Environment(Observer):
                 #         results["geometry"].iloc[0],
                 #     ],
                 # }
-
-                # # Save the updated DataFrame back to the Master Geojson file
-                # self.req = self.req.rename(
-                #     columns={
-                #         "geometry": "simulator_geometry",
-                #         "planner_geometry": "geometry",
-                #     }
-                # )
-                # logger.info(self.req["simulator_geometry"].head())
-                # logger.info(self.req["geometry"].head())
-                # self.req["simulator_geometry"] = self.req["simulator_geometry"].to_wkt()
-                # self.req = self.req.set_geometry("geometry")
-                # self.req["planner_geometry"] = self.req["planner_geometry"].to_wkt()
-
-                # Ensure that 'planner_geometry' is the geometry column
-                self.req = gpd.GeoDataFrame(self.req, geometry="planner_geometry")
-
-                # # Convert the additional geometry column to WKT format
-                # self.req["simulator_geometry"] = self.req["geometry"].apply(
-                #     lambda geom: geom.wkt
-                # )
-
-                # Drop the original geometry column
-                self.req = self.req.drop(columns=["geometry"])
-
-                # # Rename the columns
-                # self.req = self.req.rename(columns={"planner_geometry": "geometry"})
-
-                self.req.to_file("local_master.geojson", driver="GeoJSON")
+                
+                self.req.to_file(f"local_master_{self.date}.geojson", driver="GeoJSON")
                 logger.info("Successfully updated local master GeoJSON file.")
                 self.first_run = False
 
@@ -318,32 +330,41 @@ class Environment(Observer):
 
         if flag > 0:
             self.user_request()
-            # Filter data for each day(self.time)
+
+            # Check if self.req is empty
+            if self.req.empty:
+                logger.info("GeoDataFrame is empty. Exiting the function.")
+                return
+
+            # Filter data for each day (self.time)
             date = str(self._time.date()).replace("-", "")
             file_name = f"Simulator_Output_{date}.geojson"
+            logger.info(f">>>TIME: {self._time}")
+
             filtered_data = self.req[
                 self.req["simulator_completion_date"].dt.date
                 == pd.to_datetime(self._time).date()
             ]
+
+            if filtered_data.empty:
+                logger.info("Filtered GeoDataFrame is empty. Exiting the function.")
+                return
+
             filtered_data.to_file(file_name, driver="GeoJSON")
             flag = 0
+
         self._time = self._next_time
 
-        # Use Melissa logic, back to appender, local Master file
-        # Delete local master file on each trigger
-
-        # logger.info(self.combined_results.columns)
-
-        # # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        # selected_json_data = self.master_gdf[
-        #     ["planner_final_eta", "planner_time", "geometry"]
-        # ].to_json()
-        # self.app.send_message(
-        #     "swe_change",
-        #     "selected",
-        #     VectorLayer(vector_layer=selected_json_data).json(),
-        # )
-        # logger.info("(SELECTED) Publishing message successfully completed.")
+        # Convert the clipped GeoDataFrame to GeoJSON and send as message
+        selected_data = self.req[["planner_final_eta", "planner_time", "geometry"]]
+        selected_data["planner_time"] = selected_data["planner_time"].astype(str)
+        selected_json_data = selected_data.to_json()
+        self.app.send_message(
+            "swe_change",
+            "selected",
+            VectorLayer(vector_layer=selected_json_data).json(),
+        )
+        logger.info("(SELECTED) Publishing message successfully completed.")
 
     def on_change(self, source, property_name, old_value, new_value):
         if property_name == Simulator.PROPERTY_MODE and new_value == Mode.EXECUTING:
