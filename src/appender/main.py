@@ -29,6 +29,7 @@ class Environment(Observer):
         self.counter = 0
         self.master_components = []
         self.master_gdf = gpd.GeoDataFrame()
+        # self.first_run = True
 
     def add_prefix_to_columns(self, gdf, prefix):
         """
@@ -197,16 +198,24 @@ class Environment(Observer):
         self.master_gdf = pd.concat(self.master_components, ignore_index=True)
         self.remove_duplicates()
 
-        # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        # selected_json_data = self.master_gdf[
-        #     ["planner_final_eta", "planner_time", "geometry"]
-        # ].to_json()
-        # self.app.send_message(
-        #     "swe_change",
-        #     "selected",
-        #     VectorLayer(vector_layer=selected_json_data).json(),
-        # )
-        # logger.info("(SELECTED) Publishing message successfully completed.")
+        # if self.first_run:
+        #     # Convert the clipped GeoDataFrame to GeoJSON and send as message
+        #     selected_json_data = self.master_gdf[
+        #         [
+        #             "planner_final_eta",
+        #             "planner_time",
+        #             "simulator_simulation_status",
+        #             "geometry",
+        #         ]
+        #     ].to_json()
+        #     self.app.send_message(
+        #         "swe_change",
+        #         "selected",
+        #         VectorLayer(vector_layer=selected_json_data).json(),
+        #     )
+        #     logger.info("(SELECTED) Publishing message successfully completed.")
+        #     self.first_run = False
+
         date = self.app.simulator._time
         date = str(date.date()).replace("-", "")
         self.master_gdf.to_file(f"master_{date}.geojson", driver="GeoJSON")

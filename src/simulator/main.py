@@ -135,6 +135,32 @@ class Environment(Observer):
         logger.info("Calculating opportunity successfully completed.")
 
     def on_appender(self, ch, method, properties, body):
+        
+        # Define values for the first run
+        self._time = self._next_time = self._init_time = self.app.simulator._time
+        self.date = str(self._time.date()).replace("-", "")
+        self._next_time = self._time + timedelta(days=1)
+        flag = 0
+
+        date = self.app.simulator._time
+        date = str(date.date()).replace("-", "")
+
+        # All Tracks
+        geojson_path = f"local_master_{date}.geojson"
+        gdf = gpd.read_file(geojson_path)
+        
+        # Convert the clipped GeoDataFrame to GeoJSON and send as message
+        selected_data = gdf[["planner_final_eta", "planner_time", "simulator_simulation_status", "geometry"]] # Add simulation time
+        selected_data["planner_time"] = selected_data["planner_time"].astype(str)
+        selected_json_data = selected_data.to_json()
+        self.app.send_message(
+            "swe_change",
+            "selected",
+            VectorLayer(vector_layer=selected_json_data).json(),
+        )
+        logger.info("(SELECTED) Publishing message successfully completed.")
+
+    def on_appender2(self, ch, method, properties, body):
         # Initialization
         self.first_run = True
 

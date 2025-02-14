@@ -1064,7 +1064,8 @@ class Environment(Observer):
         logger.info("Specifying constellation successfully completed.")
 
         time_step = timedelta(seconds=5)
-        sim_times = pd.date_range(start, start + duration, freq=time_step)
+        # sim_times = pd.date_range(start, start + duration, freq=time_step)
+        sim_times = pd.date_range(start, end, freq=time_step)
 
         # Compute orbit tracks using vectorized operations
         logger.info("Computing orbit tracks.")
@@ -2010,8 +2011,8 @@ class Environment(Observer):
                     gcom_ds=gcom_dataset,
                     snowglobe_ds=capella_dataset,
                     mo_basin=mo_basin,
-                    start=old_value,
-                    end=new_value,
+                    start=old_value,  # 03-01
+                    end=new_value,  # 03-02
                 )
 
                 # Clip Final Eta GDF and ground tracks to the Missouri Basin
