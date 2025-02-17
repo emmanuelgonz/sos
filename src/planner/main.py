@@ -3,7 +3,7 @@ import io
 import logging
 import os
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 import boto3
@@ -586,7 +586,7 @@ class Environment(Observer):
                 altitude=555e3,
                 equator_crossing_time="06:00:30",
                 equator_crossing_ascending=False,
-                epoch=start,
+                epoch=datetime(2019, 3, 7, tzinfo=timezone.utc),  # start,
             ),
             number_planes=1,
             number_satellites=5,
@@ -707,9 +707,9 @@ class Environment(Observer):
         )
 
         gcom_union = (
-            gcom_tracks.unary_union
+            gcom_tracks.union_all()  # .unary_union
         )  # or gcom_tracks.geometry.union_all() in newer versions
-        snowglobe_union = ground_tracks.unary_union
+        snowglobe_union = ground_tracks.union_all()  # .unary_union
 
         gcom_geometries = (
             [gcom_union]
@@ -797,7 +797,7 @@ class Environment(Observer):
         unique_time = pd.Timestamp(final_eta_gdf["time"].iloc[0])
 
         # Define the number of cells to select
-        N = 50  # Maximum number of cells to select
+        N = 8  # 50  # Maximum number of cells to select
 
         # Ensure there are no NaN or Inf values in the final rewards
         final_eta_gdf["final_eta"] = final_eta_gdf["final_eta"].replace(
@@ -957,13 +957,13 @@ class Environment(Observer):
         rotate=False,
     ):
 
-        # logger.info('Encoding snow layer.')
-        polygons = self.open_polygons(geojson_path=geojson_path)
+        # # logger.info('Encoding snow layer.')
+        # polygons = self.open_polygons(geojson_path=geojson_path)
 
         raster_layer = dataset[variable]
 
         raster_layer = raster_layer.rio.write_crs("EPSG:4326")
-        clipped_layer = raster_layer.rio.clip(polygons, all_touched=True)
+        clipped_layer = raster_layer.rio.clip(self.polygons, all_touched=True)
         # print(clipped_layer)
 
         raster_layer = clipped_layer.isel(time=time_step)
@@ -1121,7 +1121,7 @@ class Environment(Observer):
             Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326"
         )
 
-    def on_change2(self, source, property_name, old_value, new_value):
+    def on_change(self, source, property_name, old_value, new_value):
         if property_name == "time":
 
             # Determine if day has changed
@@ -1136,9 +1136,6 @@ class Environment(Observer):
                 all_cells_geojson_path = f"Reward_{new_value_reformat}.geojson"
                 all_cells_gdf = gpd.read_file(all_cells_geojson_path)
                 all_cells_gdf["time"] = all_cells_gdf["time"].astype(str)
-                # all_json_data = final_eta_gdf_clipped.drop(
-                #     "time", axis=1, errors="ignore"
-                # ).to_json()
                 all_json_data = all_cells_gdf.to_json()
                 self.app.send_message(
                     self.app.app_name,
@@ -1156,20 +1153,16 @@ class Environment(Observer):
 
                 # Convert the 'time' column to string format
                 selected_cells_gdf["time"] = selected_cells_gdf["time"].astype(str)
-
-                # selected_json_data = selected_cells_gdf.drop(
-                #     "time", axis=1, errors="ignore"
-                # ).to_json()
                 selected_json_data = selected_cells_gdf.to_json()
                 self.app.send_message(
                     self.app.app_name,
                     "selected_cells",
                     VectorLayer(vector_layer=selected_json_data).json(),
                 )
-                # logger.info("(SELECTED) Publishing message successfully completed.")
-                # time.sleep(15)
+                logger.info("(SELECTED) Publishing message successfully completed.")
+                time.sleep(15)
 
-    def on_change(self, source, property_name, old_value, new_value):
+    def on_change2(self, source, property_name, old_value, new_value):
         if property_name == "time":
 
             # Determine if day has changed
@@ -1206,6 +1199,7 @@ class Environment(Observer):
                     filename="WBDHU2_4326.geojson",
                 )
                 mo_basin = self.process_geojson(mo_basin)
+                self.polygons = mo_basin.geometry
 
                 ###################
                 # Combined dataset#

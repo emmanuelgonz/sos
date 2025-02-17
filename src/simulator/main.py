@@ -134,8 +134,8 @@ class Environment(Observer):
         self.combined_results = combined_results.sort_values(by="epoch", ascending=True)
         logger.info("Calculating opportunity successfully completed.")
 
-    def on_appender(self, ch, method, properties, body):
-        
+    def on_appender2(self, ch, method, properties, body):
+
         # Define values for the first run
         self._time = self._next_time = self._init_time = self.app.simulator._time
         self.date = str(self._time.date()).replace("-", "")
@@ -148,19 +148,26 @@ class Environment(Observer):
         # All Tracks
         geojson_path = f"local_master_{date}.geojson"
         gdf = gpd.read_file(geojson_path)
-        
+
         # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        selected_data = gdf[["planner_final_eta", "planner_time", "simulator_simulation_status", "geometry"]] # Add simulation time
+        selected_data = gdf[
+            [
+                "planner_final_eta",
+                "planner_time",
+                "simulator_simulation_status",
+                "geometry",
+            ]
+        ]  # Add simulation time
         selected_data["planner_time"] = selected_data["planner_time"].astype(str)
         selected_json_data = selected_data.to_json()
         self.app.send_message(
-            "swe_change",
+            "planner",
             "selected",
             VectorLayer(vector_layer=selected_json_data).json(),
         )
         logger.info("(SELECTED) Publishing message successfully completed.")
 
-    def on_appender2(self, ch, method, properties, body):
+    def on_appender(self, ch, method, properties, body):
         # Initialization
         self.first_run = True
 
@@ -207,6 +214,7 @@ class Environment(Observer):
             logging.error(
                 "Combined results is empty! No observations until next time step! Skipping to next"
             )
+            return
 
         counter = 0
         self.observation_time = self.combined_results["epoch"].iloc[
@@ -228,6 +236,7 @@ class Environment(Observer):
 
         while self.observation_time < self._next_time:
             len_rs = len(self.combined_results)
+            logger.info(counter)
             # if self.observation_time == prev_observation_time:
             #     logging.warning("No progress in observations, breaking loop.")
             #     # self._time = self._next_time
@@ -290,6 +299,7 @@ class Environment(Observer):
 
                 # Groundtrack information
                 sat_object = self.satellite_dict.get(self.sat)
+                logger.info(sat_object)
                 results = collect_ground_track(
                     sat_object, [self.observation_time], crs="spice"
                 )
@@ -370,7 +380,7 @@ class Environment(Observer):
 
                 if self.combined_results.empty:
                     logging.error(
-                        "combined_results is empty! No observations until next time step! Skipping to next"
+                        "Combined results is empty! No observations until next time step! Skipping to next"
                     )
                     # self._time = self._next_time
                     continue
@@ -411,16 +421,24 @@ class Environment(Observer):
 
         self._time = self._next_time
 
-        # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        selected_data = self.req[["planner_final_eta", "planner_time", "simulator_simulation_status", "geometry"]] # Add simulation time
-        selected_data["planner_time"] = selected_data["planner_time"].astype(str)
-        selected_json_data = selected_data.to_json()
-        self.app.send_message(
-            "swe_change",
-            "selected",
-            VectorLayer(vector_layer=selected_json_data).json(),
-        )
-        logger.info("(SELECTED) Publishing message successfully completed.")
+        if not self.req.empty:
+            # Convert the clipped GeoDataFrame to GeoJSON and send as message
+            selected_data = self.req[
+                [
+                    "planner_final_eta",
+                    "planner_time",
+                    "simulator_simulation_status",
+                    "geometry",
+                ]
+            ]  # Add simulation time
+            selected_data["planner_time"] = selected_data["planner_time"].astype(str)
+            selected_json_data = selected_data.to_json()
+            self.app.send_message(
+                "planner",
+                "selected",
+                VectorLayer(vector_layer=selected_json_data).json(),
+            )
+            logger.info("(SELECTED) Publishing message successfully completed.")
 
     def on_change(self, source, property_name, old_value, new_value):
         if property_name == Simulator.PROPERTY_MODE and new_value == Mode.EXECUTING:

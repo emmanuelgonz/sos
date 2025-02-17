@@ -268,7 +268,7 @@ def main():
         config.rc.simulation_configuration.execution_parameters.general.prefix, config
     )
 
-    app.add_message_callback("swe_change", "selected_cells", environment.on_planner)
+    app.add_message_callback("planner", "selected_cells", environment.on_planner)
 
 
 if __name__ == "__main__":
