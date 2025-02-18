@@ -91,15 +91,19 @@ class Environment(Observer):
             logger.info(f"Previous Time: {previous}.")
 
             if previous.date() > start.date():
-                logger.info("Reading previous local master GeoJSON file.")
+
                 logger.info(f"Length of Request: {len(self.req)}.")
                 try:
+                    logger.info("Reading previous local master GeoJSON file.")
                     self.previous = gpd.read_file(
                         f"local_master_{previous_reformat}.geojson"
                     )
                 except:
+                    logger.info("Reading previous previous local master GeoJSON file.")
                     previous_previous = previous - timedelta(1)
-                    previous_previous_reformat = str(previous_previous.date()).replace("-", "")
+                    previous_previous_reformat = str(previous_previous.date()).replace(
+                        "-", ""
+                    )
                     self.previous = gpd.read_file(
                         f"local_master_{previous_previous_reformat}.geojson"
                     )
