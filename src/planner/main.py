@@ -1141,7 +1141,7 @@ class Environment(Observer):
             Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326"
         )
 
-    def on_change2(self, source, property_name, old_value, new_value):
+    def on_change(self, source, property_name, old_value, new_value):
         if property_name == "time":
 
             # Determine if day has changed
@@ -1182,7 +1182,7 @@ class Environment(Observer):
                 logger.info("(SELECTED) Publishing message successfully completed.")
                 time.sleep(15)
 
-    def on_change(self, source, property_name, old_value, new_value):
+    def on_change2(self, source, property_name, old_value, new_value):
         if property_name == "time":
 
             # Determine if day has changed
