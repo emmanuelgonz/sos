@@ -187,7 +187,7 @@ class Environment(Observer):
         # Initialization
         self.const()  # previously initialize_snowglobe_constellation()
         self.user_request()  # previously filter_master_file()
-        self.first_run = False
+        # self.first_run = False
         self._time = self._next_time = self._init_time = self.app.simulator._time
         self.date = str(self._time.date()).replace("-", "")
         self._next_time = self._time + timedelta(days=1)
@@ -387,7 +387,7 @@ class Environment(Observer):
                         self._time = self._next_time
                         continue
 
-                    self.opportunity(self.observation_time)
+                    self.opportunity(self.observation_time + timedelta(minutes=1))
 
                     if self.combined_results.empty:
                         logging.error(

@@ -310,7 +310,8 @@ class Environment(Observer):
         # Define the eta0 calculation function
         def calculate_eta0_temp(temp_values, threshold=T, k_value=k):
             # Apply logistic function
-            return 1 / (1 + np.exp(-k_value * (temp_values - threshold)))
+            # return 1 / (1 + np.exp(-k_value * (temp_values - threshold)))
+            return 1 / (1 + np.exp(k_value * (temp_values - threshold)))
 
         # Apply the eta0 calculation to the temperature values
         eta0_values = calculate_eta0_temp(temp_masked)
@@ -554,6 +555,19 @@ class Environment(Observer):
 
         return output_file, combined_ds
 
+    # def multipolygon_to_polygon(self, mo_basin):
+    #     # Assuming `multi_poly` is your MultiPolygon object
+    #     multi_poly = mo_basin.iloc[0].geometry
+
+    #     # Check if it's a MultiPolygon
+    #     if isinstance(multi_poly, MultiPolygon):
+    #         # Extract the first Polygon (or handle as needed)
+    #         poly = multi_poly.geoms[0]
+    #     else:
+    #         poly = multi_poly
+
+    #     return poly
+
     def process(self, gcom_ds, snowglobe_ds, mo_basin, start, end):
         """
         Combine three datasets by applying weights and performing grid-cell multiplication.
@@ -586,7 +600,8 @@ class Environment(Observer):
                 altitude=555e3,
                 equator_crossing_time="06:00:30",
                 equator_crossing_ascending=False,
-                epoch=datetime(2019, 3, 7, tzinfo=timezone.utc),  # start,
+                # epoch=datetime(2019, 3, 7, tzinfo=timezone.utc),  # start,
+                epoch=datetime(2019, 3, 1, tzinfo=timezone.utc),
             ),
             number_planes=1,
             number_satellites=5,
@@ -619,6 +634,7 @@ class Environment(Observer):
                 collect_orbit_track(
                     satellite=satellite,
                     times=sim_times,
+                    mask=self.polygons[0],
                 )
                 for satellite in constellation.generate_members()
             ]
@@ -632,6 +648,7 @@ class Environment(Observer):
                 compute_ground_track(
                     satellite=satellite,
                     times=sim_times,
+                    mask=self.polygons[0],
                     crs="spice",
                 )
                 for satellite in constellation.generate_members()
@@ -662,7 +679,7 @@ class Environment(Observer):
 
         # Function to compute ground tracks
         def get_ground_tracks(
-            start, frame_duration, frame, satellite_instrument_pairs, clip_geo
+            start, frame_duration, frame, satellite_instrument_pairs, clip_geo, mask
         ):
             return pd.concat(
                 [
@@ -674,6 +691,7 @@ class Environment(Observer):
                             freq=timedelta(seconds=10),
                         ),
                         crs="EPSG:3857",
+                        mask=mask,
                     )
                     for satellite_instrument_pair in satellite_instrument_pairs
                 ]
@@ -689,6 +707,7 @@ class Environment(Observer):
                     frame,
                     satellite_instrument_pairs,
                     mo_basin.envelope,
+                    mask=self.polygons[0],
                 )
                 for frame in range(num_frames)
             ],
@@ -797,7 +816,7 @@ class Environment(Observer):
         unique_time = pd.Timestamp(final_eta_gdf["time"].iloc[0])
 
         # Define the number of cells to select
-        N = 8  # 50  # Maximum number of cells to select
+        N = 50  # Maximum number of cells to select
 
         # Ensure there are no NaN or Inf values in the final rewards
         final_eta_gdf["final_eta"] = final_eta_gdf["final_eta"].replace(
@@ -1121,7 +1140,7 @@ class Environment(Observer):
             Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326"
         )
 
-    def on_change(self, source, property_name, old_value, new_value):
+    def on_change2(self, source, property_name, old_value, new_value):
         if property_name == "time":
 
             # Determine if day has changed
@@ -1162,7 +1181,7 @@ class Environment(Observer):
                 logger.info("(SELECTED) Publishing message successfully completed.")
                 time.sleep(15)
 
-    def on_change2(self, source, property_name, old_value, new_value):
+    def on_change(self, source, property_name, old_value, new_value):
         if property_name == "time":
 
             # Determine if day has changed
