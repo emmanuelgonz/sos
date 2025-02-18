@@ -25,10 +25,7 @@ from rasterio.features import geometry_mask
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon, box
 from tatc import utils
-from tatc.analysis import (
-    collect_orbit_track,
-    compute_ground_track,
-)
+from tatc.analysis import collect_orbit_track, compute_ground_track
 from tatc.schemas import (
     Instrument,
     PointedInstrument,
@@ -571,7 +568,7 @@ class Environment(Observer):
 
     #     return poly
 
-    def process(self, gcom_ds, snowglobe_ds, mo_basin, start):
+    def process(self, gcom_ds, snowglobe_ds, mo_basin, start, end):
         """
         Combine three datasets by applying weights and performing grid-cell multiplication.
 
@@ -591,12 +588,7 @@ class Environment(Observer):
         # end = datetime(2019, 3, 10, tzinfo=timezone.utc)
         duration = timedelta(days=1)
         frame_duration = timedelta(days=1)
-        # num_frames = int(1 + (end - start) / duration)
-        num_frames = int(duration / frame_duration)
-        time_step = timedelta(seconds=5)
-        sim_times = pd.date_range(start, start + duration, freq=time_step)
-        # sim_times = pd.date_range(start, end, freq=time_step)
-        # sim_times = pd.date_range(start, end + duration, freq=time_step)
+        num_frames = int(1 + (end - start) / duration)
 
         roll_angle = (30 + 33.5) / 2
         roll_range = 33.5 - 30
@@ -630,6 +622,11 @@ class Environment(Observer):
         )
         logger.info("Specifying constellation successfully completed.")
 
+        time_step = timedelta(seconds=5)
+        # sim_times = pd.date_range(start, start + duration, freq=time_step)
+        # sim_times = pd.date_range(start, end, freq=time_step)
+        sim_times = pd.date_range(start, end + duration, freq=time_step)
+
         # Compute orbit tracks using vectorized operations
         logger.info("Computing orbit tracks.")
         orbit_tracks = pd.concat(
@@ -648,7 +645,7 @@ class Environment(Observer):
         logger.info("Computing ground tracks (P1).")
         ground_tracks = pd.concat(
             [
-                compute_ground_track(  # collect_ground_track(  #
+                compute_ground_track(
                     satellite=satellite,
                     times=sim_times,
                     mask=self.polygons[0],
@@ -659,7 +656,6 @@ class Environment(Observer):
             ignore_index=True,
         )
         logger.info("Computing ground tracks (P1) successfully completed.")
-        logger.info(ground_tracks["time"])
 
         # Define instrument
         amsr2 = Instrument(
@@ -683,12 +679,12 @@ class Environment(Observer):
 
         # Function to compute ground tracks
         def get_ground_tracks(
-            start, frame_duration, frame, satellite_instrument_pairs, clip_geo, mask
+            start, frame_duration, frame, satellite_instrument_pairs, mask  # clip_geo,
         ):
             return pd.concat(
                 [
                     compute_ground_track(
-                        satellite_instrument_pair[0],
+                        gcom_w,  # satellite
                         pd.date_range(
                             start + frame * frame_duration,
                             start + (frame + 1) * frame_duration,
@@ -699,7 +695,9 @@ class Environment(Observer):
                     )
                     for satellite_instrument_pair in satellite_instrument_pairs
                 ]
-            ).clip(clip_geo)
+            ).clip(
+                mask
+            )  # clip_geo)
 
         # Compute ground tracks using vectorized operations
         logger.info("Computing ground tracks (P2).")
@@ -710,7 +708,6 @@ class Environment(Observer):
                     frame_duration,
                     frame,
                     satellite_instrument_pairs,
-                    mo_basin.envelope,
                     mask=self.polygons[0],
                 )
                 for frame in range(num_frames)
@@ -718,19 +715,10 @@ class Environment(Observer):
             ignore_index=True,
         )
         logger.info("Computing ground tracks (P2) successfully completed.")
+        gcom_tracks["time"] = pd.to_datetime(gcom_tracks["time"]).dt.tz_localize(None)
 
-        # gcom_tracks["time"] = pd.to_datetime(gcom_tracks["time"]).dt.tz_localize(None)
-        # gcom_tracks = gcom_tracks[gcom_tracks["time"] == end]
-
-        # # Filter for tracks between start
-        # ground_tracks["time"] = pd.to_datetime(ground_tracks["time"]).dt.tz_localize(
-        #     None
-        # )
-        # end_naive = pd.to_datetime(end).tz_localize(None)
-        # ground_tracks = ground_tracks[
-        #     (ground_tracks["time"] >= end_naive)
-        #     & (ground_tracks["time"] < end_naive + timedelta(days=1))
-        # ]
+        # Select the ground tracks for the specific date
+        gcom_tracks = gcom_tracks[gcom_tracks["time"] == end]
 
         # Extract the second time step
         gcom_eta = gcom_ds["combined_eta"].isel(time=1).rio.write_crs("EPSG:4326")
@@ -1049,7 +1037,9 @@ class Environment(Observer):
         image.save(buffered, format="PNG")
 
         raster_layer_encoded = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
         # logger.info('Encoding snow layer successfully completed.')
+
         return raster_layer_encoded, top_left, top_right, bottom_left, bottom_right
 
     def download_file(self, s3, bucket, key, filename):
@@ -1580,7 +1570,8 @@ class Environment(Observer):
                     gcom_ds=gcom_dataset,
                     snowglobe_ds=capella_dataset,
                     mo_basin=mo_basin,
-                    start=new_value,
+                    start=old_value,  # 03-01
+                    end=new_value,  # 03-02
                 )
 
                 # Clip Final Eta GDF and ground tracks to the Missouri Basin
