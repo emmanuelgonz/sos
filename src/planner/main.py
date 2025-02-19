@@ -4,14 +4,12 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from io import BytesIO
 
 import boto3
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import s3fs
 import xarray as xr
 from boto3.s3.transfer import TransferConfig
 from constellation_config_files.schemas import SWEChangeLayer, VectorLayer
@@ -76,28 +74,6 @@ class Environment(Observer):
         access_key_id = credentials.get("AccessKeyId")
         return session_token, secret_access_key, access_key_id
 
-    def get_data(self, s3_filepath):
-        """
-        Get data from an S3 bucket
-
-        Args:
-            s3_file (str): The S3 file path
-
-        Returns:
-            dataset (xarray.Dataset): The dataset
-        """
-        # Start a new session
-        fs = s3fs.S3FileSystem(anon=False)
-
-        # Get the file contents
-        fgrab = fs.open(s3_filepath)
-
-        # Open the file
-        dataset = xr.open_dataset(fgrab, engine="h5netcdf")
-
-        return dataset
-
-    # Function to interpolate variables from a dataset
     def interpolate_dataset(
         self, dataset, variables_to_interpolate, lat_coords, lon_coords, time_coords
     ):
@@ -389,7 +365,6 @@ class Environment(Observer):
         k = 0.03  # Scaling factor for the logistic function
         epsilon = 0.05  # Intercept to ensure eta is bounded below
 
-        # Define the eta2 calculation function with an intercept
         def calculate_eta2(swe_value, threshold=T, k_value=k, intercept=epsilon):
             # Logistic function with intercept
             return intercept + (1 - intercept) / (
@@ -554,19 +529,6 @@ class Environment(Observer):
         logger.info("Combining and multiplying the datasets successfully completed.")
 
         return output_file, combined_ds
-
-    # def multipolygon_to_polygon(self, mo_basin):
-    #     # Assuming `multi_poly` is your MultiPolygon object
-    #     multi_poly = mo_basin.iloc[0].geometry
-
-    #     # Check if it's a MultiPolygon
-    #     if isinstance(multi_poly, MultiPolygon):
-    #         # Extract the first Polygon (or handle as needed)
-    #         poly = multi_poly.geoms[0]
-    #     else:
-    #         poly = multi_poly
-
-    #     return poly
 
     def process(self, gcom_ds, snowglobe_ds, mo_basin, start, end):
         """
@@ -876,63 +838,6 @@ class Environment(Observer):
             print("No optimal solution found.")
         return output_geojson, selected_blocks_gdf
 
-    def get_data_geojson(self, s3_filepath):
-        print(f"Starting get_data_geojson with s3_filepath: {s3_filepath}")
-        try:
-            # Start a new session
-            fs = s3fs.S3FileSystem(anon=False)
-            print("S3FileSystem initialized.")
-
-            # Get the file contents
-            fgrab = fs.open(s3_filepath)
-            print("File opened from S3.")
-
-            # Read the file into a GeoDataFrame
-            geojson_data = gpd.read_file(fgrab)
-            print("GeoDataFrame created from file.")
-
-            return geojson_data
-        except Exception as e:
-            print(f"An error occurred in get_data_geojson: {e}")
-            raise
-
-    def get_data_geojson_alternative(self, s3, bucket_name, key):
-
-        # Get the object from the bucket
-        response = s3.get_object(Bucket=bucket_name, Key=key)
-
-        # Read the contents of the file
-        file_contents = response["Body"].read()
-
-        # Parse the contents as GeoJSON
-        final_eta_gdf = gpd.read_file(BytesIO(file_contents))
-
-        return final_eta_gdf
-
-    def get_missouri_basin(self, file_path: str) -> gpd.GeoSeries:
-        """
-        Get Missouri Basin geometry
-
-        Args:
-            file_path (str): File path to the shapefile
-
-        Returns:
-            gpd.GeoSeries: GeoSeries of the Missouri Basin geometry
-        """
-        # Load the shapefile
-        logger.info("Loading Missouri Basin shapefile.")
-        mo_basin = gpd.read_file(file_path)
-        logger.info("Loading Missouri Basin shapefile successfully completed.")
-        return gpd.GeoSeries(
-            Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326"
-        )
-
-    def open_polygons(self, geojson_path):
-        geojson = gpd.read_file(geojson_path)
-        polygons = geojson.geometry
-        print("Polygons loaded.")
-        return polygons
-
     def downsample_array(self, array, downsample_factor):
         """
         Downsamples the given array by the specified factor.
@@ -976,10 +881,6 @@ class Environment(Observer):
         downsample_factor=1,
         rotate=False,
     ):
-
-        # # logger.info('Encoding snow layer.')
-        # polygons = self.open_polygons(geojson_path=geojson_path)
-
         raster_layer = dataset[variable]
 
         raster_layer = raster_layer.rio.write_crs("EPSG:4326")
@@ -1151,47 +1052,6 @@ class Environment(Observer):
             if change:
                 old_value_reformat = str(old_value.date()).replace("-", "")
                 new_value_reformat = str(new_value.date()).replace("-", "")
-
-                # All Tracks
-                all_cells_geojson_path = f"Reward_{new_value_reformat}.geojson"
-                all_cells_gdf = gpd.read_file(all_cells_geojson_path)
-                all_cells_gdf["time"] = all_cells_gdf["time"].astype(str)
-                all_json_data = all_cells_gdf.to_json()
-                self.app.send_message(
-                    self.app.app_name,
-                    "all",
-                    VectorLayer(vector_layer=all_json_data).json(),
-                )
-                logger.info("(ALL) Publishing message successfully completed.")
-                time.sleep(15)
-
-                # Selected Cells
-                selected_cells_geojson_path = (
-                    f"Selected_Cells_Optimization_{new_value_reformat}.geojson"
-                )
-                selected_cells_gdf = gpd.read_file(selected_cells_geojson_path)
-
-                # Convert the 'time' column to string format
-                selected_cells_gdf["time"] = selected_cells_gdf["time"].astype(str)
-                selected_json_data = selected_cells_gdf.to_json()
-                self.app.send_message(
-                    self.app.app_name,
-                    "selected_cells",
-                    VectorLayer(vector_layer=selected_json_data).json(),
-                )
-                logger.info("(SELECTED) Publishing message successfully completed.")
-                time.sleep(15)
-
-    def on_change2(self, source, property_name, old_value, new_value):
-        if property_name == "time":
-
-            # Determine if day has changed
-            change = self.detect_level_change(new_value, old_value, "day")
-
-            # Publish message if day, week, or month has changed
-            if change:
-                old_value_reformat = str(old_value.date()).replace("-", "")
-                new_value_reformat = str(new_value.date()).replace("-", "")
                 logger.info(f">>>OLD VALUE: {old_value_reformat}")
                 logger.info(f">>>NEW VALUE: {new_value_reformat}")
 
@@ -1277,7 +1137,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1321,7 +1181,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1365,7 +1225,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1409,7 +1269,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1453,7 +1313,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1507,7 +1367,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1558,7 +1418,7 @@ class Environment(Observer):
                         top_right=top_right,
                         bottom_left=bottom_left,
                         bottom_right=bottom_right,
-                    ).json(),
+                    ).model_dump_json(),
                 )
                 logger.info("Publishing message successfully completed.")
                 time.sleep(15)
@@ -1584,7 +1444,7 @@ class Environment(Observer):
                 self.app.send_message(
                     self.app.app_name,
                     "all",
-                    VectorLayer(vector_layer=all_json_data).json(),
+                    VectorLayer(vector_layer=all_json_data).model_dump_json(),
                 )
                 logger.info("(ALL) Publishing message successfully completed.")
                 time.sleep(15)
@@ -1592,7 +1452,7 @@ class Environment(Observer):
                 self.app.send_message(
                     self.app.app_name,
                     "available",
-                    VectorLayer(vector_layer=all_json_data).json(),
+                    VectorLayer(vector_layer=all_json_data).model_dump_json(),
                 )
 
                 #######################
@@ -1612,15 +1472,51 @@ class Environment(Observer):
                 self.app.send_message(
                     self.app.app_name,
                     "selected",
-                    VectorLayer(vector_layer=selected_json_data).json(),
+                    VectorLayer(vector_layer=selected_json_data).model_dump_json(),
                 )
                 logger.info("(SELECTED) Publishing message successfully completed.")
                 time.sleep(15)
 
-                # # # Ensure CRS matches for consistency
-                # # selected_cells_gdf = selected_cells_gdf.to_crs(mo_basin.crs)
-                # # final_eta_gdf = final_eta_gdf.to_crs(mo_basin.crs)
-                # s3.close()
+    def on_change_alt(self, source, property_name, old_value, new_value):
+        if property_name == "time":
+
+            # Determine if day has changed
+            change = self.detect_level_change(new_value, old_value, "day")
+
+            # Publish message if day, week, or month has changed
+            if change:
+                old_value_reformat = str(old_value.date()).replace("-", "")
+                new_value_reformat = str(new_value.date()).replace("-", "")
+
+                # All Tracks
+                all_cells_geojson_path = f"Reward_{new_value_reformat}.geojson"
+                all_cells_gdf = gpd.read_file(all_cells_geojson_path)
+                all_cells_gdf["time"] = all_cells_gdf["time"].astype(str)
+                all_json_data = all_cells_gdf.to_json()
+                self.app.send_message(
+                    self.app.app_name,
+                    "all",
+                    VectorLayer(vector_layer=all_json_data).model_dump_json(),
+                )
+                logger.info("(ALL) Publishing message successfully completed.")
+                time.sleep(15)
+
+                # Selected Cells
+                selected_cells_geojson_path = (
+                    f"Selected_Cells_Optimization_{new_value_reformat}.geojson"
+                )
+                selected_cells_gdf = gpd.read_file(selected_cells_geojson_path)
+
+                # Convert the 'time' column to string format
+                selected_cells_gdf["time"] = selected_cells_gdf["time"].astype(str)
+                selected_json_data = selected_cells_gdf.to_json()
+                self.app.send_message(
+                    self.app.app_name,
+                    "selected_cells",
+                    VectorLayer(vector_layer=selected_json_data).model_dump_json(),
+                )
+                logger.info("(SELECTED) Publishing message successfully completed.")
+                time.sleep(15)
 
 
 def main():

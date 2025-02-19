@@ -24,12 +24,11 @@ class Environment(Observer):
         grounds (:obj:`DataFrame`): DataFrame of ground station information including groundId (*int*), latitude-longitude location (:obj:`GeographicPosition`), min_elevation (*float*) angle constraints, and operational status (*bool*)
     """
 
-    def __init__(self, app):  # , grounds):
+    def __init__(self, app):
         self.app = app
         self.counter = 0
         self.master_components = []
         self.master_gdf = gpd.GeoDataFrame()
-        # self.first_run = True
 
     def add_prefix_to_columns(self, gdf, prefix):
         """
@@ -58,13 +57,12 @@ class Environment(Observer):
             GeoDataFrame: The GeoDataFrame with the additional columns added.
         """
         gdf["simulator_simulation_status"] = None
-        gdf["simulator_completion_date"] = pd.NaT  # Setting it as a datetime type
+        gdf["simulator_completion_date"] = pd.NaT
         gdf["simulator_expiration_date"] = pd.NaT
         gdf["simulator_satellite"] = None
         gdf["simulator_polygon_groundtrack"] = None
         gdf["planner_latitude"] = gdf["planner_centroid"].y
         gdf["planner_longitude"] = gdf["planner_centroid"].x
-        # gdf['planner_geometry'] = gdf['planner_geometry'].to_wkt()
         gdf["planner_centroid"] = gdf["planner_centroid"].to_wkt()
 
         return gdf
@@ -83,7 +81,7 @@ class Environment(Observer):
             [
                 "simulator_id",
                 "planner_time",
-                "planner_final_eta",  #'planner_geometry',
+                "planner_final_eta",
                 "planner_latitude",
                 "planner_longitude",
                 "simulator_expiration_date",
@@ -106,11 +104,6 @@ class Environment(Observer):
             GeoDataFrame: The processed GeoDataFrame of the component.
         """
         logger.info("Processing component GeoJSON.")
-        # Ensure the geometry is in a projected CRS before calculating the centroid
-        # if component_gdf.crs.is_geographic:
-        #     component_gdf = component_gdf.to_crs(
-        #         epsg=3395
-        #     )  # Use EPSG:3395 for projection
 
         # Add the centroid of the geometry
         component_gdf["centroid"] = component_gdf.centroid
@@ -162,8 +155,6 @@ class Environment(Observer):
         )
 
     # def on_simulator(self, ch, method, properties, body):
-    #     body.new_data > "true" master
-    #     print(body)
 
     def on_planner(self, ch, method, properties, body):
 
@@ -198,24 +189,6 @@ class Environment(Observer):
         self.master_gdf = pd.concat(self.master_components, ignore_index=True)
         self.remove_duplicates()
 
-        # if self.first_run:
-        #     # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        #     selected_json_data = self.master_gdf[
-        #         [
-        #             "planner_final_eta",
-        #             "planner_time",
-        #             "simulator_simulation_status",
-        #             "geometry",
-        #         ]
-        #     ].to_json()
-        #     self.app.send_message(
-        #         "swe_change",
-        #         "selected",
-        #         VectorLayer(vector_layer=selected_json_data).json(),
-        #     )
-        #     logger.info("(SELECTED) Publishing message successfully completed.")
-        #     self.first_run = False
-
         date = self.app.simulator._time
         date = str(date.date()).replace("-", "")
         self.master_gdf.to_file(f"master_{date}.geojson", driver="GeoJSON")
@@ -223,7 +196,7 @@ class Environment(Observer):
         self.app.send_message(
             self.app.app_name,
             "master",
-            VectorLayer(vector_layer=selected_json_data).json(),
+            VectorLayer(vector_layer=selected_json_data).model_dump_json(),
         )
         logger.info(f"{self.app.app_name} sent message.")
 
@@ -232,16 +205,10 @@ class Environment(Observer):
             logger.info(
                 "Switched to EXECUTING mode. Counter and master components list initialized."
             )
-            # self.first_run = True
         if property_name == Simulator.PROPERTY_MODE and new_value == Mode.TERMINATING:
             logger.info(
                 "Switched to TERMINATING mode. Shutting down the application and saving data."
             )
-            # master_gdf = pd.concat(self.master_components, ignore_index=True)
-            logger.info(self.master_gdf)
-            # self.master_gdf.to_file("final_master.geojson", driver="GeoJSON")
-            # self.app.shut_down()
-            # logger.info("Data saving successfully completed.")
 
 
 def main():
