@@ -80,6 +80,8 @@ CLIENT_ID=<Ask NOS-T Operator>
 CLIENT_SECRET_KEY=<Ask NOS-T Operator>
 ```
 
+> NOTE: Restart your computer after defining environmental variables in your ~/.bashrc file.
+
 ### AWS CLI
 
 The applications use the Amazon Web Services (AWS) command line interface (CLI).
