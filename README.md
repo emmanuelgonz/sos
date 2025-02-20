@@ -65,7 +65,7 @@ source ~/.bashrc
 
 #### .env
 
-You can create a .env file using the same values as listed above in the [Credentials Bashrc section](#bashrc).
+You can create a .env file using the same values as listed above:
 
 ```bash
 vim .env
