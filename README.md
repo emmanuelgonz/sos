@@ -33,7 +33,7 @@ conda activate sos
 Install NOS-T with dependencies for our SOS applications:
 
 ```bash
-python3 -m pip install -e .[examples]
+python3 -m pip install .[examples]
 ```
 
 ### Credentials
