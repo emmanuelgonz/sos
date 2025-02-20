@@ -2,6 +2,144 @@
 
 This repository contains the codebase for SOS applications integrated within the [Novel Observing Strategies Testbed (NOS-T)](https://github.com/code-lab-org/nost-tools).
 
+## Installation
+
+### Install the NOS-T Library
+
+Clone the GitHub repo:
+
+```bash
+git clone git@github.com:emmanuelgonz/nost-tools.git
+```
+
+Change directory:
+
+```bash
+cd nost-tools
+```
+
+Create Conda environment:
+
+```bash
+conda create --name sos python=3.11
+```
+
+Activate Conda environment:
+
+```bash
+conda activate sos
+```
+
+Install NOS-T with dependencies for our SOS applications:
+
+```bash
+python3 -m pip install -e .[examples]
+```
+
+### Credentials
+
+Credentials required by NOS-T can be defined in your bashrc file or using a .env file.
+
+#### Bashrc
+
+Open your bashrc file:
+
+```bash
+vim ~/.bashrc
+```
+
+Add the following lines:
+
+```bash
+export USERNAME=<NOS-T Keycloak Username>
+export PASSWORD=<NOS-T Keycloak Password>
+export CLIENT_ID=<Ask NOS-T Operator>
+export CLIENT_SECRET_KEY=<Ask NOS-T Operator>
+```
+
+Source the changes:
+
+```bash
+source ~/.bashrc
+```
+
+#### .env
+
+You can create a .env file using the same values as listed above in the [Credentials Bashrc section](#bashrc).
+
+```bash
+vim .env
+```
+
+Add the following lines:
+
+```bash
+USERNAME=<NOS-T Keycloak Username>
+PASSWORD=<NOS-T Keycloak Password>
+CLIENT_ID=<Ask NOS-T Operator>
+CLIENT_SECRET_KEY=<Ask NOS-T Operator>
+```
+
+### AWS CLI
+
+The applications use the Amazon Web Services (AWS) command line interface (CLI).
+
+#### Install AWS CLI
+
+Installation instructions are provided below. For further information on AWS CLI installation, [click here](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).
+
+##### Linux
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+
+##### Windows
+
+1. Download and run the AWSL CLI installer: 
+
+```powershell
+msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi
+```
+
+2. Confirm successful installation
+
+```powershell
+aws --version
+```
+
+##### Mac
+
+1. Download AWS CLI installer:
+
+```bash
+curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
+```
+
+2. Run the installer: 
+
+```bash
+sudo installer -pkg ./AWSCLIV2.pkg -target /
+```
+
+3. Confirm successful installation:
+
+```bash
+aws --version
+```
+
+#### Configure AWS CLI
+
+Once installed, the AWS CLI must be configured:
+
+```bash
+aws configure
+```
+
+Enter the Access Key ID and Secret Access Key provided by the NOS-T operator.
+
 ## Introduction
 
 A single manager application is responsible for orchestrating the various applications and keeping a consistent time across applications. Upon initiation of the manager, various managed applications are triggered, each responsible for generating derived, merged datasets or raster layers sent as base64-encoded strings. Below is a table describing each application:

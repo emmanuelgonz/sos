@@ -168,9 +168,7 @@ class Environment(Observer):
                 del clipped_dataset[var].attrs["grid_mapping"]
 
         clipped_dataset.to_netcdf(output_file)
-        logger.info(
-            f"Combining the two datasets successfully completed. Final clipped dataset saved to: {output_file}."
-        )
+        logger.info(f"Combining the two datasets successfully completed.")
 
         return output_file, clipped_dataset
 
@@ -1052,8 +1050,6 @@ class Environment(Observer):
             if change:
                 old_value_reformat = str(old_value.date()).replace("-", "")
                 new_value_reformat = str(new_value.date()).replace("-", "")
-                logger.info(f">>>OLD VALUE: {old_value_reformat}")
-                logger.info(f">>>NEW VALUE: {new_value_reformat}")
 
                 # Create a boto3 session
                 session = self.start_session()
