@@ -2,6 +2,7 @@ import json
 import logging
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 from constellation_config_files.schemas import VectorLayer
 from nost_tools.application_utils import ShutDownObserver
@@ -29,7 +30,7 @@ class Environment(Observer):
         self.counter = 0
         self.master_components = []
         self.master_gdf = gpd.GeoDataFrame()
-        self.visualize_selected = False
+        self.visualize_selected = False  # True
 
     def add_prefix_to_columns(self, gdf, prefix):
         """
@@ -57,11 +58,11 @@ class Environment(Observer):
         Returns:
             GeoDataFrame: The GeoDataFrame with the additional columns added.
         """
-        gdf["simulator_simulation_status"] = None
+        gdf["simulator_simulation_status"] = np.nan  # None
         gdf["simulator_completion_date"] = pd.NaT
         gdf["simulator_expiration_date"] = pd.NaT
-        gdf["simulator_satellite"] = None
-        gdf["simulator_polygon_groundtrack"] = None
+        gdf["simulator_satellite"] = np.nan  # None
+        gdf["simulator_polygon_groundtrack"] = np.nan  # None
         gdf["planner_latitude"] = gdf["planner_centroid"].y
         gdf["planner_longitude"] = gdf["planner_centroid"].x
         gdf["planner_centroid"] = gdf["planner_centroid"].to_wkt()

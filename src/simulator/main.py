@@ -74,7 +74,52 @@ class Environment(Observer):
         self.satellite_dict = {sat.name: sat for sat in satellites}
         # logger.info("Initializing SnowGlobe constellation successfully completed.")
 
-    def user_request(self):  # filter_master_file(self):
+    # def user_request(self):  # filter_master_file(self):
+
+    #     if self.first_run:
+    #         logger.info("Using master file sent by planner.")
+    #         self.req = self.gdf
+    #         start = self.app._sim_start_time
+    #         stop = self.app._sim_stop_time
+    #         current = self.app.simulator._time
+    #         previous = current - timedelta(1)
+    #         previous_reformat = str(previous.date()).replace("-", "")
+
+    #         if previous.date() > start.date():
+
+    #             logger.info(f"Length of Request: {len(self.req)}.")
+
+    #             try:
+    #                 logger.info("Reading previous local master GeoJSON file.")
+    #                 self.previous = gpd.read_file(
+    #                     f"local_master_{previous_reformat}.geojson"
+    #                 )
+    #             except:
+    #                 logger.info("Reading previous previous local master GeoJSON file.")
+    #                 previous_previous = previous - timedelta(1)
+    #                 previous_previous_reformat = str(previous_previous.date()).replace(
+    #                     "-", ""
+    #                 )
+    #                 self.previous = gpd.read_file(
+    #                     f"local_master_{previous_previous_reformat}.geojson"
+    #                 )
+    #             self.req = (
+    #                 self.req.set_index("geometry")
+    #                 .combine_first(self.previous.set_index("geometry"))
+    #                 .reset_index()
+    #             )
+    #             self.req = gpd.GeoDataFrame(self.req, crs=4326, geometry="geometry")
+    #             logger.info(f"Length of Request After Merge: {len(self.req)}.")
+
+    #     else:
+    #         logger.info("Reading local master GeoJSON file.")
+    #         self.req = gpd.read_file(f"local_master_{self.date}.geojson")
+    #     self.filtered_req = self.req[
+    #         self.req["simulator_simulation_status"].isna()
+    #         | (self.req["simulator_simulation_status"] == "None")
+    #     ]
+
+    def user_request(self):
 
         if self.first_run:
             logger.info("Using master file sent by planner.")
@@ -85,14 +130,10 @@ class Environment(Observer):
             previous = current - timedelta(1)
             previous_reformat = str(previous.date()).replace("-", "")
 
-            # logger.info(f"Start Time: {start}.")
-            # logger.info(f"Stop Time: {stop}.")
-            # logger.info(f"Current Time: {current}.")
-            # logger.info(f"Previous Time: {previous}.")
-
             if previous.date() > start.date():
 
                 logger.info(f"Length of Request: {len(self.req)}.")
+
                 try:
                     logger.info("Reading previous local master GeoJSON file.")
                     self.previous = gpd.read_file(
@@ -148,7 +189,7 @@ class Environment(Observer):
     def message_to_geojson(self, body):
         # Convert the message body to a string then to a GeoDataFrame
         body = body.decode("utf-8")
-        data = VectorLayer.parse_raw(body)
+        data = VectorLayer.model_validate_json(body)
 
         # Convert the string back to a GeoJSON object
         return gpd.GeoDataFrame.from_features(
@@ -156,48 +197,6 @@ class Environment(Observer):
         )
 
     def on_appender(self, ch, method, properties, body):
-
-        # Define values for the first run
-        self._time = self._next_time = self._init_time = self.app.simulator._time
-        self.date = str(self._time.date()).replace("-", "")
-        self._next_time = self._time + timedelta(days=1)
-        flag = 0
-
-        date = self.app.simulator._time
-        date = str(date.date()).replace("-", "")
-
-        # All Tracks
-        geojson_path = f"local_master_{date}.geojson"
-        gdf = gpd.read_file(geojson_path)
-
-        # Convert the clipped GeoDataFrame to GeoJSON and send as message
-        selected_data = gdf[
-            [
-                # "planner_final_eta",
-                "planner_time",
-                "simulator_simulation_status",
-                "simulator_completion_date",
-                "simulator_satellite",
-                "geometry",
-            ]
-        ]  # Add simulation time
-        selected_data["planner_time"] = selected_data["planner_time"].astype(str)
-        # Assuming selected_data is your DataFrame
-        selected_data["simulator_completion_date"] = pd.to_datetime(
-            selected_data["simulator_completion_date"]
-        )
-        selected_data["simulator_completion_date"] = selected_data[
-            "simulator_completion_date"
-        ].dt.strftime("%Y-%m-%d %H:%M:%S")
-        selected_json_data = selected_data.to_json()
-        self.app.send_message(
-            "planner",
-            "selected",
-            VectorLayer(vector_layer=selected_json_data).model_dump_json(),
-        )
-        logger.info("(SELECTED) Publishing message successfully completed.")
-
-    def on_appender2(self, ch, method, properties, body):
         # Initialization
         self.first_run = True
 
@@ -321,9 +320,8 @@ class Environment(Observer):
 
                     # Groundtrack information
                     sat_object = self.satellite_dict.get(self.sat)
-                    # logger.info(sat_object)
                     results = collect_ground_track(
-                        sat_object, [self.observation_time], crs="spice"
+                        sat_object, [self.observation_time]  # , crs="spice"
                     )
                     self.req.loc[
                         self.req.simulator_id == self.id,
@@ -358,7 +356,7 @@ class Environment(Observer):
                             ).dt.date
                             > self.app.simulator._time.date(),
                             "simulator_simulation_status",
-                        ] = None
+                        ] = np.nan  # None
                         self.req.loc[
                             pd.to_datetime(
                                 self.req["simulator_completion_date"]
@@ -372,14 +370,14 @@ class Environment(Observer):
                             ).dt.date
                             > self.app.simulator._time.date(),
                             "simulator_satellite",
-                        ] = None
+                        ] = np.nan  # None
                         self.req.loc[
                             pd.to_datetime(
                                 self.req["simulator_completion_date"]
                             ).dt.date
                             > self.app.simulator._time.date(),
                             "simulator_polygon_groundtrack",
-                        ] = None
+                        ] = np.nan  # None
                         self.req.loc[
                             pd.to_datetime(
                                 self.req["simulator_completion_date"]
@@ -432,7 +430,7 @@ class Environment(Observer):
                 # logger.info(f">>>TIME: {self._time}")
 
                 filtered_data = self.req[
-                    self.req["simulator_completion_date"].dt.date
+                    pd.to_datetime(self.req["simulator_completion_date"]).dt.date
                     == pd.to_datetime(self._time).date()
                 ]
                 filtered_data.to_file(file_name, driver="GeoJSON")
@@ -461,6 +459,48 @@ class Environment(Observer):
                     VectorLayer(vector_layer=selected_json_data).model_dump_json(),
                 )
                 logger.info("(SELECTED) Publishing message successfully completed.")
+
+    def on_appender_alternative(self, ch, method, properties, body):
+
+        # Define values for the first run
+        self._time = self._next_time = self._init_time = self.app.simulator._time
+        self.date = str(self._time.date()).replace("-", "")
+        self._next_time = self._time + timedelta(days=1)
+        flag = 0
+
+        date = self.app.simulator._time
+        date = str(date.date()).replace("-", "")
+
+        # All Tracks
+        geojson_path = f"local_master_{date}.geojson"
+        gdf = gpd.read_file(geojson_path)
+
+        # Convert the clipped GeoDataFrame to GeoJSON and send as message
+        selected_data = gdf[
+            [
+                # "planner_final_eta",
+                "planner_time",
+                "simulator_simulation_status",
+                "simulator_completion_date",
+                "simulator_satellite",
+                "geometry",
+            ]
+        ]  # Add simulation time
+        selected_data["planner_time"] = selected_data["planner_time"].astype(str)
+        # Assuming selected_data is your DataFrame
+        selected_data["simulator_completion_date"] = pd.to_datetime(
+            selected_data["simulator_completion_date"]
+        )
+        selected_data["simulator_completion_date"] = selected_data[
+            "simulator_completion_date"
+        ].dt.strftime("%Y-%m-%d %H:%M:%S")
+        selected_json_data = selected_data.to_json()
+        self.app.send_message(
+            "planner",
+            "selected",
+            VectorLayer(vector_layer=selected_json_data).model_dump_json(),
+        )
+        logger.info("(SELECTED) Publishing message successfully completed.")
 
     def on_change(self, source, property_name, old_value, new_value):
         if property_name == Simulator.PROPERTY_MODE and new_value == Mode.EXECUTING:
