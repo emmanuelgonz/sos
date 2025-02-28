@@ -920,7 +920,7 @@ class Environment(Observer):
             Polygon(mo_basin.iloc[0].geometry.exterior), crs="EPSG:4326"
         )
 
-    def on_change_alternative(self, source, property_name, old_value, new_value):
+    def on_change(self, source, property_name, old_value, new_value):
         """
         Handle changes to properties
 
@@ -1319,7 +1319,7 @@ class Environment(Observer):
                 )
                 logger.info("(SELECTED) Publishing message successfully completed.")
 
-    def on_change(self, source, property_name, old_value, new_value):
+    def on_change_alternative(self, source, property_name, old_value, new_value):
         """
         Handle changes to properties
 
